@@ -1,13 +1,13 @@
-# Allianz Claims Copilot
+# Allianz Claims RAG Agent
 
 Repositorio de aprendizaje para construir, paso a paso, un sistema agentic RAG
 sobre el manual CIDE, ASCIDE y CICOS.
 
 ## Estado de la rama develop
 
-Estamos en la **Fase 0: definición del problema y arquitectura**. Todavía no hay
-código del RAG. Primero validaremos qué debe hacer el sistema, qué queda fuera y
-cómo sabremos si funciona.
+Estamos en la **Fase 1: fundamentos del proyecto**. La definición del problema y
+la arquitectura inicial ya están validadas. En esta fase construiremos un paquete
+Python mínimo con configuración, contratos de dominio, errores y pruebas.
 
 La solución se diseñará para ejecutarse completamente en local y con coste
 monetario cero. Compararemos varios modelos locales de embeddings y generación
@@ -21,6 +21,7 @@ Documentos de esta fase:
 
 - [Requisitos y criterios de aceptación](docs/phase_0_requirements.md)
 - [Decisiones iniciales de arquitectura](docs/phase_0_architecture.md)
+- [Fundamentos del proyecto](docs/phase_1_foundation.md)
 
 ## Método de trabajo
 
@@ -34,3 +35,25 @@ Cada fase seguirá el mismo ciclo:
 
 La solución completa permanece en `master` como referencia. En `develop` la
 reconstruiremos sin copiar su implementación.
+
+## Preparación local
+
+Requisitos: Python 3.12 y PowerShell.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+Copy-Item .env.example .env
+```
+
+El modo editable refleja los cambios del código fuente sin reinstalar el paquete.
+El archivo `.env` es local y Git lo ignora para evitar versionar configuración o
+futuros secretos.
+
+## Validación
+
+```powershell
+python -m ruff check .
+python -m pytest --cov=allianz_claims_rag_agent --cov-report=term-missing
+```
