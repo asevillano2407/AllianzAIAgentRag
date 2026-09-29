@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "allianz-claims-copilot"
+version = "0.1.0"
+description = "Agentic RAG for CIDE, ASCIDE and CICOS motor claims criteria"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = {text = "MIT"}
+authors = [{name = "AI Engineer Candidate"}]
+dependencies = [
+  "chromadb>=0.5.23,<1.2",
+  "fastapi>=0.115,<1.0",
+  "langchain-core>=0.3.28,<0.4",
+  "langchain-google-vertexai>=2.0.11,<3.0",
+  "langgraph>=0.2.60,<0.4",
+  "pydantic>=2.10,<3.0",
+  "pydantic-settings>=2.7,<3.0",
+  "pypdf>=5.1,<7.0",
+  "sentence-transformers>=3.3,<6.0",
+  "streamlit>=1.41,<2.0",
+  "structlog>=24.4,<26.0",
+  "tenacity>=9.0,<10.0",
+  "uvicorn[standard]>=0.34,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1.0",
+  "mypy>=1.13,<2.0",
+  "pytest>=8.3,<9.0",
+  "pytest-cov>=6.0,<8.0",
+  "ruff>=0.8,<1.0",
+]
+
+[project.scripts]
+allianz-rag = "allianz_rag.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
