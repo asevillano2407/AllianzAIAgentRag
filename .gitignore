@@ -1,0 +1,30 @@
+# Local configuration and credentials
+.env
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local data and generated indexes
+data/raw/*.pdf
+data/processed/
+data/qdrant/
+
+# Generated artifacts and temporary QA files
+.tmp/
+.pptx-build/
+.codex-finalizer/
+*.log
+
+# Operating systems and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
