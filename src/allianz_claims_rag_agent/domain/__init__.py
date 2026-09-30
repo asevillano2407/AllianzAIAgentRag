@@ -5,6 +5,7 @@ from allianz_claims_rag_agent.domain.models import (
     AnalysisResponse,
     Citation,
     ConfidenceLevel,
+    DocumentPage,
     QueryType,
     SourceChunk,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "AnalysisResponse",
     "Citation",
     "ConfidenceLevel",
+    "DocumentPage",
     "QueryType",
     "SourceChunk",
 ]

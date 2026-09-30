@@ -11,7 +11,11 @@ requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.12,<3",
     "pydantic-settings>=2.12,<3",
+    "pypdf>=6.7,<7",
 ]
+
+[project.scripts]
+allianz-ingest = "allianz_claims_rag_agent.ingestion.cli:main"
 
 [project.optional-dependencies]
 dev = [

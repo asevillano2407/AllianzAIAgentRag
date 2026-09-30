@@ -5,9 +5,9 @@ sobre el manual CIDE, ASCIDE y CICOS.
 
 ## Estado de la rama develop
 
-Estamos en la **Fase 1: fundamentos del proyecto**. La definición del problema y
-la arquitectura inicial ya están validadas. En esta fase construiremos un paquete
-Python mínimo con configuración, contratos de dominio, errores y pruebas.
+Estamos en la **Fase 2: ingesta del manual**. Los fundamentos del paquete ya
+están validados. En esta fase extraemos cada página, normalizamos el texto y
+generamos chunks deterministas sin mezclar páginas.
 
 La solución se diseñará para ejecutarse completamente en local y con coste
 monetario cero. Compararemos varios modelos locales de embeddings y generación
@@ -22,6 +22,7 @@ Documentos de esta fase:
 - [Requisitos y criterios de aceptación](docs/phase_0_requirements.md)
 - [Decisiones iniciales de arquitectura](docs/phase_0_architecture.md)
 - [Fundamentos del proyecto](docs/phase_1_foundation.md)
+- [Extracción y chunking del manual](docs/phase_2_ingestion.md)
 
 ## Método de trabajo
 
@@ -57,3 +58,18 @@ futuros secretos.
 python -m ruff check .
 python -m pytest --cov=allianz_claims_rag_agent --cov-report=term-missing
 ```
+
+## Ingesta local del manual
+
+El PDF permanece en `data/raw/` y los datos derivados en `data/processed/`;
+ambos directorios están excluidos de Git.
+
+```powershell
+allianz-ingest `
+  --input data/raw/Manual-cide-ascide-y-cicos.pdf `
+  --output data/processed/chunks.jsonl
+```
+
+El comando informa del número de páginas, chunks y páginas sin texto
+recuperable. El JSONL conserva para cada fragmento la fuente, página física,
+sección e identificador determinista.

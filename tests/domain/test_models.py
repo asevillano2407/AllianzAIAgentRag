@@ -7,6 +7,7 @@ from allianz_claims_rag_agent.domain import (
     AnalysisRequest,
     AnalysisResponse,
     ConfidenceLevel,
+    DocumentPage,
     QueryType,
     SourceChunk,
 )
@@ -32,6 +33,12 @@ def test_source_chunk_requires_a_positive_page() -> None:
             source="manual.pdf",
             page=0,
         )
+
+
+def test_document_page_allows_empty_text_for_image_only_pages() -> None:
+    page = DocumentPage(source="manual.pdf", page=32, text="")
+
+    assert page.text == ""
 
 
 def test_response_collections_are_not_shared_between_instances() -> None:

@@ -9,7 +9,7 @@ class DomainModel(BaseModel):
     """Common validation behaviour for domain models."""
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="forbid", # Block unexpected fields
         str_strip_whitespace=True,
         validate_assignment=True,
     )
@@ -34,6 +34,14 @@ class AnalysisRequest(DomainModel):
     """User input accepted by the analysis workflow."""
 
     text: str = Field(min_length=3, max_length=4_000)
+
+
+class DocumentPage(DomainModel):
+    """Text extracted from one physical page of a source document."""
+
+    source: str = Field(min_length=1)
+    page: int = Field(ge=1)
+    text: str
 
 
 class SourceChunk(DomainModel):

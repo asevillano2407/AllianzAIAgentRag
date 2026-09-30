@@ -27,6 +27,23 @@ def test_settings_can_be_overridden_with_environment_variables(
     assert settings.retrieval_top_k == 4
 
 
+def test_chunk_window_can_be_overridden_with_environment_variables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ALLIANZ_CHUNK_SIZE", "800")
+    monkeypatch.setenv("ALLIANZ_CHUNK_OVERLAP", "100")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.chunk_size == 800
+    assert settings.chunk_overlap == 100
+
+
 def test_settings_reject_invalid_retrieval_limit() -> None:
     with pytest.raises(ValidationError):
         Settings(retrieval_top_k=0, _env_file=None)
+
+
+def test_settings_reject_overlap_larger_than_half_chunk() -> None:
+    with pytest.raises(ValidationError):
+        Settings(chunk_size=400, chunk_overlap=201, _env_file=None)

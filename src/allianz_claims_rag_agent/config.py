@@ -3,7 +3,7 @@
 from enum import StrEnum
 from pathlib import Path
 
-from pydantic import AnyHttpUrl, Field
+from pydantic import AnyHttpUrl, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,3 +42,14 @@ class Settings(BaseSettings):
     llm_model: str = Field(default="qwen3:4b", min_length=1)
     retrieval_top_k: int = Field(default=6, ge=1, le=20)
     max_agent_retries: int = Field(default=1, ge=0, le=3)
+    # 1200 caracteres suelen producir fragmentos suficientemente grandes para contener una regla
+    chunk_size: int = Field(default=1_200, ge=200, le=4_000)
+    chunk_overlap: int = Field(default=150, ge=0, le=1_000)
+
+    @model_validator(mode="after")
+    def validate_chunk_window(self) -> "Settings":
+        """Ensure chunk overlap cannot consume the full chunk window."""
+        if self.chunk_overlap > self.chunk_size // 2:
+            msg = "chunk_overlap cannot exceed half of chunk_size"
+            raise ValueError(msg)
+        return self
