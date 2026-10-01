@@ -21,6 +21,7 @@ allianz-ingest = "allianz_claims_rag_agent.ingestion.cli:main"
 allianz-index = "allianz_claims_rag_agent.retrieval.cli:index_main"
 allianz-search = "allianz_claims_rag_agent.retrieval.cli:search_main"
 allianz-evaluate-retrieval = "allianz_claims_rag_agent.evaluation.cli:main"
+allianz-generate = "allianz_claims_rag_agent.generation.cli:main"
 
 [project.optional-dependencies]
 dev = [

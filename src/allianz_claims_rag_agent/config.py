@@ -42,8 +42,8 @@ class Settings(BaseSettings):
     ollama_timeout_seconds: float = Field(default=300.0, gt=0, le=600)
     embedding_model: str = Field(default="qwen3-embedding:0.6b", min_length=1)
     embedding_batch_size: int = Field(default=8, ge=1, le=256)
-    llm_model: str = Field(default="qwen3:4b", min_length=1)
-    retrieval_top_k: int = Field(default=6, ge=1, le=20)
+    llm_model: str = Field(default="llama3.2:3b", min_length=1)
+    retrieval_top_k: int = Field(default=3, ge=1, le=20)
     max_agent_retries: int = Field(default=1, ge=0, le=3)
     # 1200 caracteres suelen producir fragmentos suficientemente grandes para contener una regla
     chunk_size: int = Field(default=1_200, ge=200, le=4_000)

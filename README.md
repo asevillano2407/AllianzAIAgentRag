@@ -5,9 +5,10 @@ sobre el manual CIDE, ASCIDE y CICOS.
 
 ## Estado de la rama develop
 
-Estamos en la **Fase 3: embeddings y recuperación vectorial**. La ingesta ya
-produce chunks deterministas y ahora estamos separando el modelo de embeddings,
-la coordinación del indexado y el almacenamiento local en Qdrant.
+La **Fase 4: LLM local y salida estructurada** está cerrada. El retrieval se
+evaluó con dos embeddings y `qwen3-embedding:0.6b` quedó seleccionado. Para la
+generación comparamos `qwen3:4b` con `llama3.2:3b`; Llama queda como opción local
+por defecto porque completó el flujo validado dentro del límite de tiempo.
 
 La solución se diseñará para ejecutarse completamente en local y con coste
 monetario cero. Compararemos varios modelos locales de embeddings y generación
@@ -24,6 +25,7 @@ Documentos de esta fase:
 - [Fundamentos del proyecto](docs/phase_1_foundation.md)
 - [Extracción y chunking del manual](docs/phase_2_ingestion.md)
 - [Embeddings y recuperación vectorial](docs/phase_3_retrieval.md)
+- [LLM local y salida estructurada](docs/phase_4_generation.md)
 
 ## Método de trabajo
 
@@ -88,3 +90,18 @@ allianz-evaluate-retrieval --top-k 6
 Cada modelo usa una colección Qdrant distinta para evitar mezclar espacios
 vectoriales incompatibles. El indexado informa del progreso por lotes y emite
 al terminar un resumen JSON con el modelo, la colección y la dimensión.
+
+## Generación local validada
+
+Con `llama3.2:3b` descargado en Ollama:
+
+```powershell
+ollama pull llama3.2:3b
+allianz-generate "¿Cuál es el plazo de caducidad de una reclamación CICOS?" `
+  --query-type manual_question
+```
+
+La aplicación no acepta ciegamente el texto del modelo: valida el esquema y
+comprueba que el identificador, la página y la cita literal existan en los
+chunks recuperados. El modelo, el número de tokens y la duración se incluyen en
+la salida para facilitar la evaluación.

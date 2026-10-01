@@ -90,6 +90,17 @@ preguntas y `top_k=6`:
 | `qwen3-embedding:0.6b` | 1.024 | 0,2167 | 0,9333 | 0,8500 | 11,47 s |
 | `bge-m3` | 1.024 | 0,1833 | 0,8667 | 0,8417 | 15,98 s |
 
+| Modelo | Dimensiones | Precision@K | Recall@K | MRR |
+| --- | ---: | ---: | ---: | ---: |
+| `qwen3-embedding:0.6b` (K=3) | 1.024 | 0,4000 | 0,9000 | 0,8500 |
+| `qwen3-embedding:0.6b` (K=4) | 1.024 | 0,3000 | 0,9000 | 0,8500 |
+| `qwen3-embedding:0.6b` (K=5) | 1.024 | 0,2400 | 0,9000 | 0,8500 |
+| `qwen3-embedding:0.6b` (K=7) | 1.024 | 0,1857 | 0,9333 | 0,8500 |
+| `bge-m3` (K=3) | 1.024 | 0,3000 | 0,7333 | 0,8000 |
+| `bge-m3` (K=4) | 1.024 | 0,2500 | 0,7667 | 0,8250 |
+| `bge-m3` (K=5) | 1.024 | 0,2000 | 0,7667 | 0,8250 |
+| `bge-m3` (K=7) | 1.024 | 0,1571 | 0,8667 | 0,8417 |
+
 Los tiempos corresponden a una sola consulta de caducidad y sirven solo como
 referencia del equipo local. La Precision@6 baja refleja que se solicitan seis
 chunks aunque muchas preguntas tengan una sola página etiquetada; Recall y MRR
