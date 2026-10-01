@@ -5,9 +5,9 @@ sobre el manual CIDE, ASCIDE y CICOS.
 
 ## Estado de la rama develop
 
-Estamos en la **Fase 2: ingesta del manual**. Los fundamentos del paquete ya
-están validados. En esta fase extraemos cada página, normalizamos el texto y
-generamos chunks deterministas sin mezclar páginas.
+Estamos en la **Fase 3: embeddings y recuperación vectorial**. La ingesta ya
+produce chunks deterministas y ahora estamos separando el modelo de embeddings,
+la coordinación del indexado y el almacenamiento local en Qdrant.
 
 La solución se diseñará para ejecutarse completamente en local y con coste
 monetario cero. Compararemos varios modelos locales de embeddings y generación
@@ -23,6 +23,7 @@ Documentos de esta fase:
 - [Decisiones iniciales de arquitectura](docs/phase_0_architecture.md)
 - [Fundamentos del proyecto](docs/phase_1_foundation.md)
 - [Extracción y chunking del manual](docs/phase_2_ingestion.md)
+- [Embeddings y recuperación vectorial](docs/phase_3_retrieval.md)
 
 ## Método de trabajo
 
@@ -73,3 +74,17 @@ allianz-ingest `
 El comando informa del número de páginas, chunks y páginas sin texto
 recuperable. El JSONL conserva para cada fragmento la fuente, página física,
 sección e identificador determinista.
+
+## Indexado y búsqueda local
+
+Con Ollama en ejecución y `qwen3-embedding:0.6b` descargado:
+
+```powershell
+allianz-index --input data/processed/chunks.jsonl
+allianz-search "¿Cuándo caduca un siniestro en CICOS?" --top-k 6
+allianz-evaluate-retrieval --top-k 6
+```
+
+Cada modelo usa una colección Qdrant distinta para evitar mezclar espacios
+vectoriales incompatibles. El indexado informa del progreso por lotes y emite
+al terminar un resumen JSON con el modelo, la colección y la dimensión.

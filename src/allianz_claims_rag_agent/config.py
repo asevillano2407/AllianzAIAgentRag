@@ -37,8 +37,11 @@ class Settings(BaseSettings):
     log_level: LogLevel = LogLevel.INFO
     manual_path: Path = Path("data/raw/Manual-cide-ascide-y-cicos.pdf")
     qdrant_path: Path = Path("data/qdrant")
+    qdrant_collection_prefix: str = Field(default="allianz_manual", min_length=1)
     ollama_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:11434")
+    ollama_timeout_seconds: float = Field(default=300.0, gt=0, le=600)
     embedding_model: str = Field(default="qwen3-embedding:0.6b", min_length=1)
+    embedding_batch_size: int = Field(default=8, ge=1, le=256)
     llm_model: str = Field(default="qwen3:4b", min_length=1)
     retrieval_top_k: int = Field(default=6, ge=1, le=20)
     max_agent_retries: int = Field(default=1, ge=0, le=3)

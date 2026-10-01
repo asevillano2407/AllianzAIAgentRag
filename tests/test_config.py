@@ -13,6 +13,9 @@ def test_settings_use_safe_local_defaults() -> None:
     assert settings.manual_path.name == "Manual-cide-ascide-y-cicos.pdf"
     assert settings.retrieval_top_k == 6
     assert settings.max_agent_retries == 1
+    assert settings.qdrant_collection_prefix == "allianz_manual"
+    assert settings.embedding_batch_size == 8
+    assert settings.ollama_timeout_seconds == 300.0
 
 
 def test_settings_can_be_overridden_with_environment_variables(

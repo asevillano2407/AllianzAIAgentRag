@@ -9,13 +9,18 @@ description = "Local agentic RAG assistant for the CIDE, ASCIDE and CICOS manual
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "httpx>=0.28,<1",
     "pydantic>=2.12,<3",
     "pydantic-settings>=2.12,<3",
     "pypdf>=6.7,<7",
+    "qdrant-client>=1.15,<2",
 ]
 
 [project.scripts]
 allianz-ingest = "allianz_claims_rag_agent.ingestion.cli:main"
+allianz-index = "allianz_claims_rag_agent.retrieval.cli:index_main"
+allianz-search = "allianz_claims_rag_agent.retrieval.cli:search_main"
+allianz-evaluate-retrieval = "allianz_claims_rag_agent.evaluation.cli:main"
 
 [project.optional-dependencies]
 dev = [

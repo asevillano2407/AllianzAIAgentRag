@@ -13,6 +13,10 @@ class DocumentProcessingError(ApplicationError):
     """Raised when a source document cannot be processed safely."""
 
 
+class EmbeddingError(ApplicationError):
+    """Raised when text cannot be converted into valid vectors."""
+
+
 class RetrievalError(ApplicationError):
     """Raised when relevant source fragments cannot be retrieved."""
 

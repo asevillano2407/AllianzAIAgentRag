@@ -11,7 +11,7 @@ respuesta estructurada y mostrar las páginas que sustentan la conclusión.
 
 ## 2 Usuario principal
 
-El usuario del MVP es un tramitador o especialista de siniestros que quiere:
+El usuario es un tramitador o especialista de siniestros que quiere:
 
 - Formular una pregunta concreta sobre el manual.
 - Describir un accidente en lenguaje natural.
