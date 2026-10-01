@@ -66,6 +66,8 @@ el esquema, la consulta y los chunks recuperados.
 5. Pydantic valida tipos y campos; después `AnswerGenerator` valida las citas.
 6. Solo una respuesta que supera ambas capas se devuelve junto con tokens y latencia.
 
+## Query expansion dentro del flujo end-to-end
+
 Para las descripciones de accidentes se añade una expansión determinista de
 vocabulario. El relato original se busca sin modificar y, cuando aparece una
 expresión conocida, se ejecuta una segunda búsqueda con la terminología del
@@ -84,6 +86,10 @@ primero la regla `MARCHA ATRÁS/ALCANCE TRASERO`. El LLM pasó a extraer los hec
 y citar esa regla, aunque mantuvo confianza baja. Esto separa dos conclusiones:
 la query expansion corrigió el fallo de retrieval, mientras que el modelo 3B
 sigue siendo demasiado conservador para resolver por sí solo este caso ambiguo.
+
+El diseño y las métricas de esta mejora se documentan también en
+`phase_3_retrieval.md`, porque la causa y la solución pertenecen a retrieval,
+aunque el problema se detectara al probar la generación completa.
 
 El comando manual une retrieval y generación sin anticipar todavía el router:
 

@@ -111,3 +111,61 @@ las tres métricas, alcanzó menor latencia en la consulta observada y su descar
 es aproximadamente la mitad (639 MB frente a 1,2 GB). Ambos índices contienen
 160 puntos, usan distancia coseno y permanecen disponibles en colecciones
 separadas para repetir o ampliar la evaluación.
+
+## Ampliación posterior: query expansion
+
+La prueba end-to-end con una descripción de alcance trasero descubrió un error
+que el dataset inicial no mostraba. El relato incluía «semáforo en rojo» y «choca
+por detrás», pero la búsqueda directa priorizó páginas sobre semáforos y no
+recuperó la regla de `ALCANCE TRASERO`.
+
+La solución no consiste en obligar al LLM a responder sin evidencia ni en
+incrementar indiscriminadamente `top_k`. Para `accident_description` se generan
+dos consultas:
+
+1. Una consulta técnica construida mediante reglas deterministas.
+2. El relato original sin modificar.
+
+Ejemplos de vocabulario:
+
+| Expresión del relato | Término añadido para recuperar el manual |
+| --- | --- |
+| choca o golpea por detrás | alcance trasero, daños delanteros y traseros |
+| cambia de carril | cambio o invasión de carril |
+| retrocede | marcha atrás |
+| estaba aparcado | vehículo estacionado |
+| se incorpora | incorporación a la circulación |
+
+Cada consulta genera su propio ranking. `SemanticRetriever.retrieve_many`
+elimina duplicados y aplica Reciprocal Rank Fusion:
+
+```text
+score(chunk) = suma de 1 / (60 + posición_en_cada_ranking)
+```
+
+La consulta técnica se procesa primero para resolver empates a su favor, pero
+el relato original conserva los detalles que no cubre el diccionario. No se
+añaden hechos ni se decide responsabilidad durante esta transformación.
+
+### Resultado observado
+
+| Configuración | Páginas recuperadas en las tres primeras posiciones |
+| --- | --- |
+| Solo relato original | 67, 97, 87 |
+| Relato + expansión + fusión | 75, 67, 18 |
+
+La página 75, ausente antes de la mejora, pasó a primera posición y contiene la
+regla `MARCHA ATRÁS/ALCANCE TRASERO`.
+
+## Decisión sobre top_k
+
+Subir de K=3 a K=6 aumentó Recall de 0,9000 a 0,9333, pero redujo Precision de
+0,4000 a 0,2167 y mantuvo MRR en 0,8500. Por tanto, el incremento aporta solo
+3,33 puntos porcentuales de recall a cambio de casi duplicar el contexto y
+añadir más fragmentos irrelevantes.
+
+En el caso de alcance trasero, la evidencia correcta ya ocupa la primera
+posición después de la expansión. Aumentar K no puede mejorar su presencia y sí
+puede dificultar la generación. Se mantiene K=3 como valor predeterminado. Una
+futura evaluación podrá comparar K dinámico o reranking, pero no se incorpora
+sin medirlo sobre el conjunto completo.

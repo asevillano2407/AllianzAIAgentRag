@@ -20,6 +20,7 @@ documentará como posible evolución, pero no se implementará.
 
 Documentos de esta fase:
 
+- [Índice y estado de la documentación](docs/README.md)
 - [Requisitos y criterios de aceptación](docs/phase_0_requirements.md)
 - [Decisiones iniciales de arquitectura](docs/phase_0_architecture.md)
 - [Fundamentos del proyecto](docs/phase_1_foundation.md)
