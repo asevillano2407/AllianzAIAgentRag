@@ -14,6 +14,7 @@ from allianz_claims_rag_agent.generation.ollama import OllamaStructuredLlm
 from allianz_claims_rag_agent.generation.service import AnswerGenerator
 from allianz_claims_rag_agent.retrieval.naming import collection_name_for_model
 from allianz_claims_rag_agent.retrieval.qdrant_store import QdrantVectorStore
+from allianz_claims_rag_agent.retrieval.query_expansion import expand_accident_query
 from allianz_claims_rag_agent.retrieval.services import SemanticRetriever
 
 
@@ -45,6 +46,7 @@ def main() -> int:
     qdrant_path = args.qdrant_path or settings.qdrant_path
     top_k = args.top_k if args.top_k is not None else settings.retrieval_top_k
     query_type = QueryType(args.query_type)
+    retrieval_queries = _build_retrieval_queries(args.query, query_type)
     collection_name = collection_name_for_model(
         settings.qdrant_collection_prefix,
         embedding_model,
@@ -57,7 +59,9 @@ def main() -> int:
             model_name=embedding_model,
             timeout_seconds=settings.ollama_timeout_seconds,
         ) as embedding_provider:
-            chunks = SemanticRetriever(embedding_provider, store).retrieve(args.query, top_k)
+            chunks = SemanticRetriever(embedding_provider, store).retrieve_many(
+                retrieval_queries, top_k
+            )
 
         with OllamaStructuredLlm(
             base_url=str(settings.ollama_base_url),
@@ -78,6 +82,7 @@ def main() -> int:
                     for key, value in asdict(generated).items()
                     if key != "response"
                 },
+                "retrieval_queries": retrieval_queries,
                 "retrieved_chunk_ids": [chunk.chunk_id for chunk in chunks],
             },
             ensure_ascii=False,
@@ -91,3 +96,14 @@ def _positive_int(value: str) -> int:
     if parsed < 1:
         raise argparse.ArgumentTypeError("value must be at least 1")
     return parsed
+
+
+def _build_retrieval_queries(query: str, query_type: QueryType) -> list[str]:
+    """Prefer domain vocabulary while preserving the original accident report."""
+    if query_type is QueryType.ACCIDENT_DESCRIPTION:
+        expanded_query = expand_accident_query(query)
+        if expanded_query is not None:
+            # Domain terminology wins deterministic RRF ties; the original report
+            # still participates so case-specific details are not discarded.
+            return [expanded_query, query]
+    return [query]

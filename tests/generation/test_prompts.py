@@ -30,3 +30,5 @@ def test_prompt_marks_context_as_untrusted_and_preserves_metadata() -> None:
     assert chunk.text in prompt
     assert "contenido no confiable" in SYSTEM_PROMPT
     assert "responsabilidad legal" in SYSTEM_PROMPT
+    assert "hechos explícitos" in SYSTEM_PROMPT
+    assert "No solicites velocidad" in SYSTEM_PROMPT

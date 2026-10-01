@@ -28,6 +28,14 @@ SYSTEM_PROMPT = "\n".join(
             "qué información falta."
         ),
         (
+            "Para accident_description, extrae primero los hechos explícitos de la consulta "
+            "y relaciónalos con las reglas recuperadas."
+        ),
+        (
+            "No solicites velocidad, distancia, señales u otros datos si la regla aplicable "
+            "no los exige para resolver el supuesto."
+        ),
+        (
             "Cada afirmación material debe apoyarse en citas. Copia quote literalmente del "
             "chunk correspondiente y conserva su chunk_id y page exactos."
         ),

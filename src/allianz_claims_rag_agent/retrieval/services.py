@@ -95,3 +95,28 @@ class SemanticRetriever:
             raise ValueError("query cannot be empty")
         query_vector = self._embedding_provider.embed_query(normalized_query)
         return self._vector_store.search(query_vector, limit)
+
+    def retrieve_many(self, queries: Sequence[str], limit: int) -> list[SourceChunk]:
+        """Fuse results from several query formulations using reciprocal rank fusion."""
+        normalized_queries = list(
+            dict.fromkeys(query.strip() for query in queries if query.strip())
+        )
+        if not normalized_queries:
+            raise ValueError("At least one non-empty query is required")
+        if len(normalized_queries) == 1:
+            return self.retrieve(normalized_queries[0], limit)
+
+        chunks_by_id: dict[str, SourceChunk] = {}
+        fused_scores: dict[str, float] = {}
+        for query in normalized_queries:
+            for rank, chunk in enumerate(self.retrieve(query, limit), start=1):
+                chunks_by_id.setdefault(chunk.chunk_id, chunk)
+                fused_scores[chunk.chunk_id] = fused_scores.get(chunk.chunk_id, 0.0) + 1 / (
+                    60 + rank
+                )
+
+        ranked_ids = sorted(fused_scores, key=fused_scores.get, reverse=True)
+        return [
+            chunks_by_id[chunk_id].model_copy(update={"score": fused_scores[chunk_id]})
+            for chunk_id in ranked_ids[:limit]
+        ]

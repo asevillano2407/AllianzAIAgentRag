@@ -66,6 +66,25 @@ el esquema, la consulta y los chunks recuperados.
 5. Pydantic valida tipos y campos; después `AnswerGenerator` valida las citas.
 6. Solo una respuesta que supera ambas capas se devuelve junto con tokens y latencia.
 
+Para las descripciones de accidentes se añade una expansión determinista de
+vocabulario. El relato original se busca sin modificar y, cuando aparece una
+expresión conocida, se ejecuta una segunda búsqueda con la terminología del
+manual. Por ejemplo, «choca por detrás» añade «alcance trasero». Los dos rankings
+se combinan mediante Reciprocal Rank Fusion y se eliminan chunks duplicados. La
+consulta técnica se procesa primero para resolver a su favor posibles empates;
+el relato original sigue participando para conservar los detalles del caso.
+
+Esta expansión no decide la responsabilidad ni añade hechos: únicamente conecta
+expresiones cotidianas con términos del dominio. Al ser determinista, es rápida,
+observable y puede probarse sin otra llamada al LLM.
+
+En el caso de alcance trasero usado como prueba, la recuperación original
+devolvía las páginas 67, 97 y 87. Tras la expansión devolvió 75, 67 y 18, situando
+primero la regla `MARCHA ATRÁS/ALCANCE TRASERO`. El LLM pasó a extraer los hechos
+y citar esa regla, aunque mantuvo confianza baja. Esto separa dos conclusiones:
+la query expansion corrigió el fallo de retrieval, mientras que el modelo 3B
+sigue siendo demasiado conservador para resolver por sí solo este caso ambiguo.
+
 El comando manual une retrieval y generación sin anticipar todavía el router:
 
 ```powershell

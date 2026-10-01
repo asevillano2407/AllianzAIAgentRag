@@ -44,6 +44,17 @@ class RecordingVectorStore:
         return [_chunk("result", "evidence")]
 
 
+class SequencedVectorStore(RecordingVectorStore):
+    def __init__(self, results: list[list[SourceChunk]]) -> None:
+        super().__init__()
+        self.results = results
+        self.search_limits: list[int] = []
+
+    def search(self, query_vector: Sequence[float], limit: int) -> list[SourceChunk]:
+        self.search_limits.append(limit)
+        return self.results[len(self.search_limits) - 1]
+
+
 class InvalidCountProvider(FakeEmbeddingProvider):
     def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
         return []
@@ -97,3 +108,24 @@ def test_semantic_retriever_rejects_empty_query() -> None:
 
     with pytest.raises(ValueError, match="query cannot be empty"):
         retriever.retrieve("   ", limit=4)
+
+
+def test_semantic_retriever_fuses_multiple_query_rankings_and_removes_duplicates() -> None:
+    first = _chunk("first", "first evidence")
+    shared = _chunk("shared", "shared evidence")
+    last = _chunk("last", "last evidence")
+    store = SequencedVectorStore([[first, shared], [shared, last]])
+    retriever = SemanticRetriever(FakeEmbeddingProvider(), store)
+
+    results = retriever.retrieve_many(["original", "technical"], limit=3)
+
+    assert [chunk.chunk_id for chunk in results] == ["shared", "first", "last"]
+    assert store.search_limits == [3, 3]
+    assert results[0].score is not None
+
+
+def test_semantic_retriever_rejects_empty_query_collection() -> None:
+    retriever = SemanticRetriever(FakeEmbeddingProvider(), RecordingVectorStore())
+
+    with pytest.raises(ValueError, match="non-empty query"):
+        retriever.retrieve_many(["", "   "], limit=3)

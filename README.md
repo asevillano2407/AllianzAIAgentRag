@@ -105,3 +105,8 @@ La aplicación no acepta ciegamente el texto del modelo: valida el esquema y
 comprueba que el identificador, la página y la cita literal existan en los
 chunks recuperados. El modelo, el número de tokens y la duración se incluyen en
 la salida para facilitar la evaluación.
+
+Las descripciones de accidentes utilizan dos consultas cuando se reconoce una
+maniobra: el relato original y una expansión con vocabulario del manual, como
+«choca por detrás» → «alcance trasero». Sus resultados se fusionan antes de
+generar la respuesta, sin utilizar un segundo LLM ni inventar hechos.

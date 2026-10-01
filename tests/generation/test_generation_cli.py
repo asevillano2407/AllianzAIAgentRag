@@ -2,7 +2,8 @@
 
 import pytest
 
-from allianz_claims_rag_agent.generation.cli import build_parser
+from allianz_claims_rag_agent.domain import QueryType
+from allianz_claims_rag_agent.generation.cli import _build_retrieval_queries, build_parser
 
 
 def test_parser_defaults_to_manual_question() -> None:
@@ -24,3 +25,18 @@ def test_parser_accepts_accident_description() -> None:
 def test_parser_rejects_invalid_query_type() -> None:
     with pytest.raises(SystemExit):
         build_parser().parse_args(["consulta", "--query-type", "unknown"])
+
+
+def test_accident_retrieval_queries_prioritize_expansion_and_preserve_report() -> None:
+    query = "El vehículo B choca por detrás contra el vehículo A"
+
+    queries = _build_retrieval_queries(query, QueryType.ACCIDENT_DESCRIPTION)
+
+    assert "alcance trasero" in queries[0]
+    assert queries[1] == query
+
+
+def test_manual_question_does_not_use_accident_expansion() -> None:
+    query = "¿Qué significa chocar por detrás?"
+
+    assert _build_retrieval_queries(query, QueryType.MANUAL_QUESTION) == [query]
