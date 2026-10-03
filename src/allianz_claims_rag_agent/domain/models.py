@@ -1,6 +1,7 @@
 """Validated domain models for requests, retrieval, and responses."""
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -28,6 +29,24 @@ class ConfidenceLevel(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
+
+
+class ConventionApplicability(StrEnum):
+    """Whether CIDE/ASCIDE can be applied to the described accident."""
+
+    APPLICABLE = "applicable"
+    NOT_APPLICABLE = "not_applicable"
+    UNDETERMINED = "undetermined"
+
+
+class ConventionResponsibility(StrEnum):
+    """Responsibility assigned under the convention, not under general law."""
+
+    VEHICLE_A = "vehicle_a"
+    VEHICLE_B = "vehicle_b"
+    SHARED = "shared"
+    UNDETERMINED = "undetermined"
+    NOT_APPLICABLE = "not_applicable"
 
 
 class AnalysisRequest(DomainModel):
@@ -68,7 +87,21 @@ class AnalysisResponse(DomainModel):
 
     query_type: QueryType
     conclusion: str = Field(min_length=1)
+    convention_applicability: ConventionApplicability | None = None
+    convention_responsibility: ConventionResponsibility | None = None
+    applicability_citations: list[Citation] = Field(default_factory=list)
+    responsibility_citations: list[Citation] = Field(default_factory=list)
     facts: list[str] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list)
     confidence: ConfidenceLevel
     citations: list[Citation] = Field(default_factory=list)
+
+
+class AccidentAnalysisResponse(AnalysisResponse):
+    """Response contract whose accident-specific decisions are always explicit."""
+
+    query_type: Literal[QueryType.ACCIDENT_DESCRIPTION]
+    convention_applicability: ConventionApplicability
+    convention_responsibility: ConventionResponsibility
+    applicability_citations: list[Citation]
+    responsibility_citations: list[Citation]

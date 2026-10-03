@@ -32,3 +32,15 @@ def test_prompt_marks_context_as_untrusted_and_preserves_metadata() -> None:
     assert "responsabilidad legal" in SYSTEM_PROMPT
     assert "hechos explícitos" in SYSTEM_PROMPT
     assert "No solicites velocidad" in SYSTEM_PROMPT
+    assert "responsable según el convenio" in SYSTEM_PROMPT
+    assert "convention_applicability" in SYSTEM_PROMPT
+    assert "convention_responsibility" in SYSTEM_PROMPT
+    assert "applicability_citations" in SYSTEM_PROMPT
+    assert "responsibility_citations" in SYSTEM_PROMPT
+    assert "no es motivo de exclusión" in SYSTEM_PROMPT
+    assert "ignora alcoholemia" in SYSTEM_PROMPT
+    assert "exclusivamente un objeto JSON" in SYSTEM_PROMPT
+    assert "no debe limitarse a repetir" in SYSTEM_PROMPT
+    assert "B es el vehículo" in SYSTEM_PROMPT
+    assert "fragmento literal mínimo" in SYSTEM_PROMPT
+    assert "fragmento contiguo" in SYSTEM_PROMPT

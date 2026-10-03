@@ -97,19 +97,22 @@ class SemanticRetriever:
         return self._vector_store.search(query_vector, limit)
 
     def retrieve_many(self, queries: Sequence[str], limit: int) -> list[SourceChunk]:
-        """Fuse results from several query formulations using reciprocal rank fusion."""
+        """Over-fetch, deduplicate, and fuse query variants with reciprocal rank fusion."""
+        if limit < 1:
+            raise ValueError("limit must be at least 1")
         normalized_queries = list(
             dict.fromkeys(query.strip() for query in queries if query.strip())
         )
         if not normalized_queries:
             raise ValueError("At least one non-empty query is required")
+        candidate_limit = limit * 2
         if len(normalized_queries) == 1:
-            return self.retrieve(normalized_queries[0], limit)
+            return self.retrieve(normalized_queries[0], candidate_limit)[:limit]
 
         chunks_by_id: dict[str, SourceChunk] = {}
         fused_scores: dict[str, float] = {}
         for query in normalized_queries:
-            for rank, chunk in enumerate(self.retrieve(query, limit), start=1):
+            for rank, chunk in enumerate(self.retrieve(query, candidate_limit), start=1):
                 chunks_by_id.setdefault(chunk.chunk_id, chunk)
                 fused_scores[chunk.chunk_id] = fused_scores.get(chunk.chunk_id, 0.0) + 1 / (
                     60 + rank

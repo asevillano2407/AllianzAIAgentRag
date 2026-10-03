@@ -60,7 +60,9 @@ ALLIANZ_QDRANT_COLLECTION_PREFIX=allianz_manual
 ALLIANZ_EMBEDDING_MODEL=qwen3-embedding:0.6b
 ALLIANZ_EMBEDDING_BATCH_SIZE=8
 ALLIANZ_OLLAMA_TIMEOUT_SECONDS=300
-ALLIANZ_RETRIEVAL_TOP_K=6
+ALLIANZ_RETRIEVAL_TOP_K=4
+ALLIANZ_RETRIEVAL_CANDIDATE_K=12
+ALLIANZ_RERANKER_MODEL=BAAI/bge-reranker-v2-m3
 ```
 
 ## Recorrido local reproducible
@@ -166,6 +168,127 @@ añadir más fragmentos irrelevantes.
 
 En el caso de alcance trasero, la evidencia correcta ya ocupa la primera
 posición después de la expansión. Aumentar K no puede mejorar su presencia y sí
-puede dificultar la generación. Se mantiene K=3 como valor predeterminado. Una
-futura evaluación podrá comparar K dinámico o reranking, pero no se incorpora
-sin medirlo sobre el conjunto completo.
+puede dificultar la generación. `top_k=4` se mantuvo para medir retrieval y
+comparar configuraciones. La ejecución final de generación redujo el contexto a
+`top_k=3`: con reranking híbrido conservó un recall de grupos de páginas de
+`1,0` en los cinco casos y evitó enviar un cuarto fragmento al LLM.
+
+## Evaluación del reranking antes de la generación
+
+La recuperación y la generación se evalúan por separado. Esta separación evita
+atribuir al LLM una mejora causada por evidencia mejor ordenada y permite probar
+el retrieval sin pagar el coste temporal de generar una respuesta por caso.
+
+El flujo evaluado es:
+
+```text
+consulta y expansiones
+        -> recuperación semántica + RRF (12 candidatos)
+        -> reranker cross-encoder local
+        -> 4 chunks para el LLM
+```
+
+Se comparó la misma colección, el mismo embedding y las mismas diez consultas
+etiquetadas con y sin `BAAI/bge-reranker-v2-m3`:
+
+| Configuración | Precision@4 | Recall@4 | MRR |
+| --- | ---: | ---: | ---: |
+| Embedding + RRF | 0,3000 | 0,9000 | 0,8500 |
+| Embedding + RRF + reranker | 0,3250 | 0,9333 | 0,9500 |
+
+El mayor avance está en MRR: la primera evidencia relevante aparece antes. La
+precisión y el recall también mejoran en este dataset de preguntas generales.
+Sin embargo, esta mejora no basta para seleccionar el reranker: también debe
+conservar los distintos conceptos necesarios en relatos de accidente.
+
+### Resultado en los cinco casos de accidente
+
+La evaluación `retrieval-only` mostró un comportamiento distinto:
+
+| Caso | Páginas sin reranker | Páginas con reranker | Recall de grupos con reranker |
+| --- | --- | --- | ---: |
+| A. Alcance trasero | 67, 75, 73, 97 | 87, 97, 46, 75 | 1,0 |
+| B. Colisión múltiple | 58, 18, 19, 56 | 18, 57, 58, 19 | 1,0 |
+| C. Estacionado y contrario desconocido | 46, 73, 73, 34 | 73, 46, 67, 73 | 0,5 |
+| D. Cambio de carril | 75, 41, 75, 72 | 75, 41, 75, 41 | 1,0 |
+| E. Alcoholemia y lesiones | 9, 5, 18, 56 | 9, 5, 18, 57 | 1,0 |
+
+El recall medio de grupos de páginas baja de `1,0` a `0,9`. Además, la página
+75 pasa de segunda a cuarta posición en A y la evidencia principal de B deja la
+primera posición. En C desaparece del contexto final la página 34, necesaria
+para evaluar la identificación del vehículo contrario.
+
+La causa probable es arquitectónica: la recuperación usa el relato y todas las
+expansiones técnicas, pero el cross-encoder actual vuelve a ordenar los
+candidatos únicamente contra el relato original. En consultas con varios
+conceptos, el reranker puede favorecer el tema dominante y descartar evidencia
+recuperada gracias a una expansión.
+
+Por tanto, el reranker permanece opcional y desactivado por defecto. Antes de
+probarlo con el LLM se evaluará una fusión de rankings que combine:
+
+1. la posición obtenida mediante query expansion y RRF;
+2. la posición del cross-encoder;
+3. la cobertura de las distintas consultas técnicas.
+
+### Resultado final del reranking híbrido
+
+La fusión multi-query puntúa cada expansión y el relato por separado, conserva
+el primer resultado de cada intención y completa el contexto mediante RRF. Con
+esta estrategia los cinco casos recuperan todos sus grupos de páginas:
+
+| Caso | Páginas finales | Recall de grupos |
+| --- | --- | ---: |
+| A. Alcance trasero | 75, 87, 67, 66 | 1,0 |
+| B. Colisión múltiple | 56, 18, 58, 57 | 1,0 |
+| C. Estacionado y contrario desconocido | 73, 34, 73, 46 | 1,0 |
+| D. Cambio de carril | 41, 75, 72, 41 | 1,0 |
+| E. Alcoholemia y lesiones | 9, 5, 57, 18 | 1,0 |
+
+El híbrido corrige la pérdida de la página 34 en C y sitúa la evidencia
+principal en primera posición para A, B y E. En D la página 75 queda segunda,
+pero continúa dentro de un contexto de cuatro chunks.
+
+Se conserva como dependencia opcional para que el flujo básico no obligue a
+instalar PyTorch ni a descargar 2,27 GB. Es, sin embargo, la configuración
+recomendada para la demo y la evaluación final: 12 candidatos, fusión
+multi-query y 3 chunks finales. No se realizarán más ajustes de retrieval para
+esta prueba técnica.
+
+Para reproducir la comparación sin ejecutar ningún LLM:
+
+```powershell
+allianz-evaluate-retrieval --top-k 4
+allianz-evaluate-retrieval --rerank --candidate-k 12 --top-k 4
+
+allianz-evaluate-llms `
+  --retrieval-only `
+  --rerank `
+  --candidate-k 12 `
+  --top-k 3
+```
+
+## Qué valida cada métrica
+
+- `Precision@K`: proporción de resultados recuperados cuyas páginas están
+  etiquetadas como relevantes. Penaliza contexto sobrante.
+- `Recall@K`: proporción de páginas relevantes etiquetadas que aparece en los K
+  resultados. Es útil en las diez preguntas generales.
+- `MRR`: posición de la primera evidencia relevante. Premia que el soporte
+  aparezca pronto.
+- `retrieval_page_group_recall`: cobertura de conceptos, no de páginas exactas.
+  Un grupo como `[56, 57, 58]` representa páginas alternativas que soportan la
+  misma regla; el caso C contiene dos grupos porque necesita tanto la regla del
+  vehículo aparcado como la identificación del contrario.
+
+Estas métricas no evalúan si la respuesta final es correcta. Solo confirman si
+la evidencia esperada llegó al contexto. La corrección de negocio se mide
+después y por separado.
+
+### Lectura para la presentación
+
+- El embedding recupera candidatos con recall alto.
+- La query expansion introduce vocabulario específico del manual.
+- El reranker mejora el orden y filtra el contexto antes del LLM.
+- Evaluar cada componente por separado permite justificar la arquitectura con
+  métricas y no únicamente con ejemplos cualitativos.

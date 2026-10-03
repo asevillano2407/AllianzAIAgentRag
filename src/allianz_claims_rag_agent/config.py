@@ -42,8 +42,11 @@ class Settings(BaseSettings):
     ollama_timeout_seconds: float = Field(default=300.0, gt=0, le=600)
     embedding_model: str = Field(default="qwen3-embedding:0.6b", min_length=1)
     embedding_batch_size: int = Field(default=8, ge=1, le=256)
-    llm_model: str = Field(default="llama3.2:3b", min_length=1)
+    llm_model: str = Field(default="qwen3:4b", min_length=1)
     retrieval_top_k: int = Field(default=3, ge=1, le=20)
+    retrieval_candidate_k: int = Field(default=12, ge=1, le=100)
+    reranker_model: str = Field(default="BAAI/bge-reranker-v2-m3", min_length=1)
+    reranker_batch_size: int = Field(default=4, ge=1, le=64)
     max_agent_retries: int = Field(default=1, ge=0, le=3)
     # 1200 caracteres suelen producir fragmentos suficientemente grandes para contener una regla
     chunk_size: int = Field(default=1_200, ge=200, le=4_000)
@@ -51,8 +54,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_chunk_window(self) -> "Settings":
-        """Ensure chunk overlap cannot consume the full chunk window."""
+        """Validate configuration values that depend on another setting."""
         if self.chunk_overlap > self.chunk_size // 2:
             msg = "chunk_overlap cannot exceed half of chunk_size"
+            raise ValueError(msg)
+        if self.retrieval_candidate_k < self.retrieval_top_k:
+            msg = "retrieval_candidate_k cannot be smaller than retrieval_top_k"
             raise ValueError(msg)
         return self

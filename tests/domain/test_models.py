@@ -4,9 +4,12 @@ import pytest
 from pydantic import ValidationError
 
 from allianz_claims_rag_agent.domain import (
+    AccidentAnalysisResponse,
     AnalysisRequest,
     AnalysisResponse,
     ConfidenceLevel,
+    ConventionApplicability,
+    ConventionResponsibility,
     DocumentPage,
     QueryType,
     SourceChunk,
@@ -61,3 +64,27 @@ def test_response_collections_are_not_shared_between_instances() -> None:
 def test_domain_models_reject_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         AnalysisRequest(text="Consulta válida", unexpected="not allowed")
+
+
+def test_accident_decisions_use_explicit_domain_values() -> None:
+    response = AnalysisResponse(
+        query_type=QueryType.ACCIDENT_DESCRIPTION,
+        conclusion="El convenio se aplica y el vehículo B es responsable.",
+        convention_applicability=ConventionApplicability.APPLICABLE,
+        convention_responsibility=ConventionResponsibility.VEHICLE_B,
+        confidence=ConfidenceLevel.HIGH,
+    )
+
+    assert response.convention_applicability is ConventionApplicability.APPLICABLE
+    assert response.convention_responsibility is ConventionResponsibility.VEHICLE_B
+
+
+def test_accident_schema_requires_decisions_and_decision_citations() -> None:
+    required_fields = set(AccidentAnalysisResponse.model_json_schema()["required"])
+
+    assert {
+        "convention_applicability",
+        "convention_responsibility",
+        "applicability_citations",
+        "responsibility_citations",
+    } <= required_fields

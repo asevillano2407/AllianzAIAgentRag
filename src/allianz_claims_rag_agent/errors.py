@@ -21,6 +21,10 @@ class RetrievalError(ApplicationError):
     """Raised when relevant source fragments cannot be retrieved."""
 
 
+class RerankingError(ApplicationError):
+    """Raised when local candidate reranking cannot be completed."""
+
+
 class GenerationError(ApplicationError):
     """Raised when the local language model cannot generate a response."""
 

@@ -120,8 +120,19 @@ def test_semantic_retriever_fuses_multiple_query_rankings_and_removes_duplicates
     results = retriever.retrieve_many(["original", "technical"], limit=3)
 
     assert [chunk.chunk_id for chunk in results] == ["shared", "first", "last"]
-    assert store.search_limits == [3, 3]
+    assert store.search_limits == [6, 6]
     assert results[0].score is not None
+
+
+def test_semantic_retriever_overfetches_single_query_before_final_cut() -> None:
+    chunks = [_chunk(str(index), f"evidence {index}") for index in range(6)]
+    store = SequencedVectorStore([chunks])
+    retriever = SemanticRetriever(FakeEmbeddingProvider(), store)
+
+    results = retriever.retrieve_many(["original"], limit=3)
+
+    assert store.search_limits == [6]
+    assert len(results) == 3
 
 
 def test_semantic_retriever_rejects_empty_query_collection() -> None:

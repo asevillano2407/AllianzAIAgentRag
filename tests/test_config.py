@@ -12,10 +12,13 @@ def test_settings_use_safe_local_defaults() -> None:
     assert settings.environment is Environment.LOCAL
     assert settings.manual_path.name == "Manual-cide-ascide-y-cicos.pdf"
     assert settings.retrieval_top_k == 3
+    assert settings.retrieval_candidate_k == 12
+    assert settings.reranker_model == "BAAI/bge-reranker-v2-m3"
+    assert settings.reranker_batch_size == 4
     assert settings.max_agent_retries == 1
     assert settings.qdrant_collection_prefix == "allianz_manual"
     assert settings.embedding_batch_size == 8
-    assert settings.llm_model == "llama3.2:3b"
+    assert settings.llm_model == "qwen3:4b"
     assert settings.ollama_timeout_seconds == 300.0
 
 
@@ -46,6 +49,11 @@ def test_chunk_window_can_be_overridden_with_environment_variables(
 def test_settings_reject_invalid_retrieval_limit() -> None:
     with pytest.raises(ValidationError):
         Settings(retrieval_top_k=0, _env_file=None)
+
+
+def test_settings_reject_candidate_limit_smaller_than_final_limit() -> None:
+    with pytest.raises(ValidationError, match="retrieval_candidate_k"):
+        Settings(retrieval_top_k=4, retrieval_candidate_k=3, _env_file=None)
 
 
 def test_settings_reject_overlap_larger_than_half_chunk() -> None:

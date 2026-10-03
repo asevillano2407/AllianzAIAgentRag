@@ -10,9 +10,9 @@ from allianz_claims_rag_agent.config import Settings
 from allianz_claims_rag_agent.embeddings import OllamaEmbeddingProvider
 from allianz_claims_rag_agent.errors import ApplicationError
 from allianz_claims_rag_agent.evaluation.retrieval import evaluate_rankings, read_retrieval_cases
+from allianz_claims_rag_agent.retrieval.factory import build_evidence_retriever
 from allianz_claims_rag_agent.retrieval.naming import collection_name_for_model
 from allianz_claims_rag_agent.retrieval.qdrant_store import QdrantVectorStore
-from allianz_claims_rag_agent.retrieval.services import SemanticRetriever
 
 DEFAULT_DATASET_PATH = Path("evaluation/datasets/retrieval_cases.jsonl")
 
@@ -24,6 +24,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", help="Must match the indexed Ollama embedding model.")
     parser.add_argument("--qdrant-path", type=Path, help="Defaults to ALLIANZ_QDRANT_PATH.")
     parser.add_argument("--top-k", type=int, help="Defaults to ALLIANZ_RETRIEVAL_TOP_K.")
+    parser.add_argument(
+        "--rerank",
+        action="store_true",
+        help="Enable local cross-encoder reranking.",
+    )
+    parser.add_argument("--reranker-model", help="Defaults to ALLIANZ_RERANKER_MODEL.")
+    parser.add_argument("--candidate-k", type=int, help="Defaults to configured candidate-k.")
     return parser
 
 
@@ -34,10 +41,15 @@ def main() -> int:
     model_name = args.model or settings.embedding_model
     qdrant_path = args.qdrant_path or settings.qdrant_path
     top_k = args.top_k if args.top_k is not None else settings.retrieval_top_k
+    candidate_k = (
+        args.candidate_k
+        if args.candidate_k is not None
+        else settings.retrieval_candidate_k
+    )
     collection_name = collection_name_for_model(settings.qdrant_collection_prefix, model_name)
 
-    if top_k < 1:
-        print("top-k must be at least 1", file=sys.stderr)
+    if top_k < 1 or candidate_k < top_k:
+        print("top-k must be positive and candidate-k cannot be smaller", file=sys.stderr)
         return 1
 
     try:
@@ -48,12 +60,39 @@ def main() -> int:
             model_name=model_name,
             timeout_seconds=settings.ollama_timeout_seconds,
         ) as provider:
-            retriever = SemanticRetriever(provider, store)
-            rankings = {case.case_id: retriever.retrieve(case.query, top_k) for case in cases}
+            retriever = build_evidence_retriever(
+                provider,
+                store,
+                reranker_model=(
+                    args.reranker_model or settings.reranker_model
+                    if args.rerank
+                    else None
+                ),
+                candidate_k=candidate_k,
+                reranker_batch_size=settings.reranker_batch_size,
+            )
+            rankings = {
+                case.case_id: retriever.retrieve_many([case.query], top_k)
+                for case in cases
+            }
         metrics = evaluate_rankings(cases, rankings, top_k)
     except (ApplicationError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
-    print(json.dumps({"model": model_name, **asdict(metrics)}, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                "model": model_name,
+                "reranker_model": (
+                    args.reranker_model or settings.reranker_model
+                    if args.rerank
+                    else None
+                ),
+                "candidate_k": candidate_k if args.rerank else None,
+                **asdict(metrics),
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0

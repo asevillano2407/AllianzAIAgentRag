@@ -12,10 +12,10 @@ from allianz_claims_rag_agent.embeddings import OllamaEmbeddingProvider
 from allianz_claims_rag_agent.errors import ApplicationError
 from allianz_claims_rag_agent.generation.ollama import OllamaStructuredLlm
 from allianz_claims_rag_agent.generation.service import AnswerGenerator
+from allianz_claims_rag_agent.retrieval.factory import build_evidence_retriever
 from allianz_claims_rag_agent.retrieval.naming import collection_name_for_model
 from allianz_claims_rag_agent.retrieval.qdrant_store import QdrantVectorStore
-from allianz_claims_rag_agent.retrieval.query_expansion import expand_accident_query
-from allianz_claims_rag_agent.retrieval.services import SemanticRetriever
+from allianz_claims_rag_agent.retrieval.query_expansion import build_retrieval_queries
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +34,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--llm-model", help="Defaults to ALLIANZ_LLM_MODEL.")
     parser.add_argument("--qdrant-path", type=Path, help="Defaults to ALLIANZ_QDRANT_PATH.")
     parser.add_argument("--top-k", type=_positive_int, help="Defaults to ALLIANZ_RETRIEVAL_TOP_K.")
+    parser.add_argument(
+        "--rerank",
+        action="store_true",
+        help="Enable local cross-encoder reranking.",
+    )
+    parser.add_argument("--reranker-model", help="Defaults to ALLIANZ_RERANKER_MODEL.")
+    parser.add_argument(
+        "--candidate-k",
+        type=_positive_int,
+        help="Defaults to configured candidate-k.",
+    )
     return parser
 
 
@@ -45,8 +56,13 @@ def main() -> int:
     llm_model = args.llm_model or settings.llm_model
     qdrant_path = args.qdrant_path or settings.qdrant_path
     top_k = args.top_k if args.top_k is not None else settings.retrieval_top_k
+    candidate_k = (
+        args.candidate_k
+        if args.candidate_k is not None
+        else settings.retrieval_candidate_k
+    )
     query_type = QueryType(args.query_type)
-    retrieval_queries = _build_retrieval_queries(args.query, query_type)
+    retrieval_queries = build_retrieval_queries(args.query, query_type)
     collection_name = collection_name_for_model(
         settings.qdrant_collection_prefix,
         embedding_model,
@@ -59,9 +75,18 @@ def main() -> int:
             model_name=embedding_model,
             timeout_seconds=settings.ollama_timeout_seconds,
         ) as embedding_provider:
-            chunks = SemanticRetriever(embedding_provider, store).retrieve_many(
-                retrieval_queries, top_k
+            retriever = build_evidence_retriever(
+                embedding_provider,
+                store,
+                reranker_model=(
+                    args.reranker_model or settings.reranker_model
+                    if args.rerank
+                    else None
+                ),
+                candidate_k=candidate_k,
+                reranker_batch_size=settings.reranker_batch_size,
             )
+            chunks = retriever.retrieve_many(retrieval_queries, top_k)
 
         with OllamaStructuredLlm(
             base_url=str(settings.ollama_base_url),
@@ -78,9 +103,7 @@ def main() -> int:
             {
                 "response": generated.response.model_dump(mode="json"),
                 "generation": {
-                    key: value
-                    for key, value in asdict(generated).items()
-                    if key != "response"
+                    key: value for key, value in asdict(generated).items() if key != "response"
                 },
                 "retrieval_queries": retrieval_queries,
                 "retrieved_chunk_ids": [chunk.chunk_id for chunk in chunks],
@@ -96,14 +119,3 @@ def _positive_int(value: str) -> int:
     if parsed < 1:
         raise argparse.ArgumentTypeError("value must be at least 1")
     return parsed
-
-
-def _build_retrieval_queries(query: str, query_type: QueryType) -> list[str]:
-    """Prefer domain vocabulary while preserving the original accident report."""
-    if query_type is QueryType.ACCIDENT_DESCRIPTION:
-        expanded_query = expand_accident_query(query)
-        if expanded_query is not None:
-            # Domain terminology wins deterministic RRF ties; the original report
-            # still participates so case-specific details are not discarded.
-            return [expanded_query, query]
-    return [query]

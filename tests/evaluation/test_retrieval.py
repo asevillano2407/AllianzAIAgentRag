@@ -11,6 +11,7 @@ from allianz_claims_rag_agent.evaluation import (
     evaluate_rankings,
     read_retrieval_cases,
 )
+from allianz_claims_rag_agent.evaluation.cli import build_parser
 
 
 def _chunk(chunk_id: str, page: int) -> SourceChunk:
@@ -71,3 +72,10 @@ def test_project_retrieval_dataset_is_valid() -> None:
 
     assert len(cases) == 10
     assert len({case.case_id for case in cases}) == 10
+
+
+def test_retrieval_evaluation_parser_accepts_optional_reranking() -> None:
+    args = build_parser().parse_args(["--rerank", "--candidate-k", "12"])
+
+    assert args.rerank is True
+    assert args.candidate_k == 12

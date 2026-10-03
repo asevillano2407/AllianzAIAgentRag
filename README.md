@@ -5,10 +5,13 @@ sobre el manual CIDE, ASCIDE y CICOS.
 
 ## Estado de la rama develop
 
-La **Fase 4: LLM local y salida estructurada** está cerrada. El retrieval se
+La **Fase 5: orquestación agentic** está cerrada. El grafo clasifica la entrada,
+ejecuta retrieval y generación, reintenta solo fallos transitorios y siempre
+termina con una respuesta validada o un fallback seguro. El retrieval se
 evaluó con dos embeddings y `qwen3-embedding:0.6b` quedó seleccionado. Para la
-generación comparamos `qwen3:4b` con `llama3.2:3b`; Llama queda como opción local
-por defecto porque completó el flujo validado dentro del límite de tiempo.
+generación comparamos `llama3.2:3b`, `qwen3:4b`, `qwen3:8b` y `gemma3:4b`.
+`qwen3:4b` queda seleccionado: en la evaluación final completó 5/5 casos y
+alcanzó un 80 % de corrección de negocio.
 
 La solución se diseñará para ejecutarse completamente en local y con coste
 monetario cero. Compararemos varios modelos locales de embeddings y generación
@@ -27,6 +30,9 @@ Documentos de esta fase:
 - [Extracción y chunking del manual](docs/phase_2_ingestion.md)
 - [Embeddings y recuperación vectorial](docs/phase_3_retrieval.md)
 - [LLM local y salida estructurada](docs/phase_4_generation.md)
+- [Orquestación agentic con LangGraph](docs/phase_5_agentic_workflow.md)
+- [Enfoque técnico y decisiones](docs/technical_approach.md)
+- [Evaluación de los cinco casos de demostración](docs/demo_cases_evaluation.md)
 
 ## Método de trabajo
 
@@ -92,22 +98,46 @@ Cada modelo usa una colección Qdrant distinta para evitar mezclar espacios
 vectoriales incompatibles. El indexado informa del progreso por lotes y emite
 al terminar un resumen JSON con el modelo, la colección y la dimensión.
 
-## Generación local validada
-
-Con `llama3.2:3b` descargado en Ollama:
+El reranking local es opcional para no instalar PyTorch en el flujo básico. Para
+comparar recuperación vectorial frente a recuperación con cross-encoder:
 
 ```powershell
-ollama pull llama3.2:3b
+python -m pip install -e ".[dev,rerank]"
+
+allianz-evaluate-retrieval --top-k 4
+allianz-evaluate-retrieval --rerank --candidate-k 12 --top-k 4
+```
+
+Por defecto, `--rerank` utiliza `BAAI/bge-reranker-v2-m3`. La primera ejecución
+descarga el modelo; las siguientes pueden funcionar con la copia local en caché.
+
+## Generación local validada
+
+Con `qwen3:4b` descargado en Ollama:
+
+```powershell
+ollama pull qwen3:4b
 allianz-generate "¿Cuál es el plazo de caducidad de una reclamación CICOS?" `
   --query-type manual_question
 ```
 
-La aplicación no acepta ciegamente el texto del modelo: valida el esquema y
-comprueba que el identificador, la página y la cita literal existan en los
-chunks recuperados. El modelo, el número de tokens y la duración se incluyen en
-la salida para facilitar la evaluación.
+La aplicación no acepta ciegamente el texto del modelo: valida el esquema, la
+coherencia entre aplicabilidad y responsabilidad y el soporte de las citas. En
+accidentes, los errores seguros de metadatos se reparan y una decisión sin
+evidencia se degrada a `undetermined`, en vez de descartar toda la respuesta. El
+modelo, los ajustes aplicados, los tokens y la duración se incluyen en la salida.
 
 Las descripciones de accidentes utilizan dos consultas cuando se reconoce una
 maniobra: el relato original y una expansión con vocabulario del manual, como
 «choca por detrás» → «alcance trasero». Sus resultados se fusionan antes de
 generar la respuesta, sin utilizar un segundo LLM ni inventar hechos.
+
+Configuración recomendada para la demo completa:
+
+```powershell
+allianz-agent `
+  "El vehículo A cambia de carril y roza lateralmente al vehículo B." `
+  --rerank `
+  --candidate-k 12 `
+  --top-k 3
+```

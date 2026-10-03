@@ -41,6 +41,19 @@ def _chunk() -> SourceChunk:
     )
 
 
+def _alcohol_chunk() -> SourceChunk:
+    return SourceChunk(
+        chunk_id="chunk-9",
+        text=(
+            "No se considera la alcoholemia como motivo de exclusión por lo que en estos "
+            "casos son de aplicación los Convenios."
+        ),
+        source="manual.pdf",
+        page=9,
+        section="Alcoholemia",
+    )
+
+
 def _payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "query_type": "manual_question",
@@ -56,6 +69,18 @@ def _payload(**overrides: object) -> dict[str, object]:
             }
         ],
     }
+    payload.update(overrides)
+    return payload
+
+
+def _accident_payload(**overrides: object) -> dict[str, object]:
+    payload = _payload(
+        query_type="accident_description",
+        convention_applicability="undetermined",
+        convention_responsibility="undetermined",
+        applicability_citations=[],
+        responsibility_citations=[],
+    )
     payload.update(overrides)
     return payload
 
@@ -136,4 +161,372 @@ def test_generator_rejects_invalid_json_schema_output() -> None:
             "¿Cuándo caduca?",
             QueryType.MANUAL_QUESTION,
             [_chunk()],
+        )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"convention_applicability": None, "convention_responsibility": "vehicle_b"},
+        {"convention_applicability": "applicable", "convention_responsibility": None},
+    ],
+)
+def test_generator_rejects_missing_accident_decisions(
+    overrides: dict[str, object],
+) -> None:
+    payload = _accident_payload(**overrides)
+
+    with pytest.raises(OutputValidationError, match="does not match AnalysisResponse"):
+        AnswerGenerator(FakeLlm(payload)).generate(
+            "El vehículo B alcanza al vehículo A.",
+            QueryType.ACCIDENT_DESCRIPTION,
+            [_chunk()],
+        )
+
+
+def test_generator_degrades_applicability_without_valid_evidence() -> None:
+    payload = _accident_payload(
+        convention_applicability="applicable",
+        convention_responsibility="undetermined",
+        applicability_citations=[],
+    )
+
+    generated = AnswerGenerator(FakeLlm(payload)).generate(
+        "El vehículo B alcanza al vehículo A.",
+        QueryType.ACCIDENT_DESCRIPTION,
+        [_chunk()],
+    )
+
+    assert generated.response.convention_applicability.value == "undetermined"
+    assert generated.response.convention_responsibility.value == "undetermined"
+    assert generated.response.confidence.value == "low"
+    assert "applicability_downgraded_missing_valid_citation" in generated.adjustments
+
+
+def test_generator_repairs_inconsistent_applicable_responsibility() -> None:
+    citation = {
+        "chunk_id": "chunk-9",
+        "page": 9,
+        "quote": "No se considera la alcoholemia como motivo de exclusión",
+    }
+    payload = _accident_payload(
+        convention_applicability="applicable",
+        convention_responsibility="not_applicable",
+        applicability_citations=[citation],
+        citations=[],
+    )
+
+    generated = AnswerGenerator(FakeLlm(payload)).generate(
+        "El conductor se encontraba bajo los efectos del alcohol.",
+        QueryType.ACCIDENT_DESCRIPTION,
+        [_alcohol_chunk()],
+    )
+
+    assert generated.response.convention_applicability.value == "applicable"
+    assert generated.response.convention_responsibility.value == "undetermined"
+    assert "responsibility_repaired_from_inconsistent_decision" in generated.adjustments
+
+
+def test_generator_aligns_responsibility_when_convention_is_not_applicable() -> None:
+    chunk = SourceChunk(
+        chunk_id="chunk-exclusion",
+        text="La existencia de un tercer vehículo invalida la aplicación de los Convenios.",
+        source="manual.pdf",
+        page=10,
+    )
+    citation = {
+        "chunk_id": "chunk-exclusion",
+        "page": 10,
+        "quote": "invalida la aplicación de los Convenios",
+    }
+    payload = _accident_payload(
+        convention_applicability="not_applicable",
+        convention_responsibility="vehicle_b",
+        applicability_citations=[citation],
+        responsibility_citations=[citation],
+        citations=[],
+    )
+
+    generated = AnswerGenerator(FakeLlm(payload)).generate(
+        "Intervienen tres vehículos.",
+        QueryType.ACCIDENT_DESCRIPTION,
+        [chunk],
+    )
+
+    assert generated.response.convention_responsibility.value == "not_applicable"
+    assert generated.response.responsibility_citations == []
+    assert (
+        "responsibility_aligned_with_non_applicable_convention"
+        in generated.adjustments
+    )
+
+
+def test_generator_accepts_applicability_supported_by_specific_citation() -> None:
+    citation = {
+        "chunk_id": "chunk-9",
+        "page": 9,
+        "quote": "No se considera la alcoholemia como motivo de exclusión",
+    }
+    payload = _accident_payload(
+        convention_applicability="applicable",
+        convention_responsibility="undetermined",
+        applicability_citations=[citation],
+        citations=[],
+    )
+
+    generated = AnswerGenerator(FakeLlm(payload)).generate(
+        "El conductor se encontraba bajo los efectos del alcohol.",
+        QueryType.ACCIDENT_DESCRIPTION,
+        [_alcohol_chunk()],
+    )
+
+    assert generated.response.applicability_citations[0].page == 9
+
+
+def test_generator_rejects_applicability_that_contradicts_its_citation() -> None:
+    citation = {
+        "chunk_id": "chunk-9",
+        "page": 9,
+        "quote": (
+            "No se considera la alcoholemia como motivo de exclusión por lo que en estos "
+            "casos son de aplicación los Convenios."
+        ),
+    }
+    payload = _accident_payload(
+        convention_applicability="not_applicable",
+        convention_responsibility="not_applicable",
+        applicability_citations=[citation],
+        citations=[],
+    )
+
+    with pytest.raises(OutputValidationError, match="contradicts evidence"):
+        AnswerGenerator(FakeLlm(payload)).generate(
+            "El conductor se encontraba bajo los efectos del alcohol.",
+            QueryType.ACCIDENT_DESCRIPTION,
+            [_alcohol_chunk()],
+        )
+
+
+def test_generator_downgrades_responsibility_without_normative_evidence() -> None:
+    citation = {
+        "chunk_id": "chunk-9",
+        "page": 9,
+        "quote": (
+            "No se considera la alcoholemia como motivo de exclusión por lo que en estos "
+            "casos son de aplicación los Convenios."
+        ),
+    }
+    payload = _accident_payload(
+        conclusion="El relato describe alcoholemia y lesiones.",
+        convention_applicability="applicable",
+        convention_responsibility="vehicle_b",
+        applicability_citations=[citation],
+        responsibility_citations=[citation],
+        citations=[],
+    )
+
+    generated = AnswerGenerator(FakeLlm(payload)).generate(
+        "El conductor se encontraba bajo los efectos del alcohol.",
+        QueryType.ACCIDENT_DESCRIPTION,
+        [_alcohol_chunk()],
+    )
+
+    assert generated.response.convention_responsibility.value == "undetermined"
+    assert generated.response.responsibility_citations == []
+    assert generated.response.confidence.value == "low"
+    assert generated.adjustments == (
+        "responsibility_downgraded_missing_normative_evidence",
+        "conclusion_rendered_from_structured_decisions",
+    )
+    assert "responsabilidad no puede determinarse" in generated.response.conclusion
+
+
+def test_generator_rewrites_explicit_responsibility_without_normative_evidence() -> None:
+    citation = {
+        "chunk_id": "chunk-9",
+        "page": 9,
+        "quote": "No se considera la alcoholemia como motivo de exclusión",
+    }
+    payload = _accident_payload(
+        conclusion="El vehículo B es responsable según el convenio.",
+        convention_applicability="applicable",
+        convention_responsibility="vehicle_b",
+        applicability_citations=[citation],
+        responsibility_citations=[citation],
+        citations=[],
+    )
+
+    generated = AnswerGenerator(FakeLlm(payload)).generate(
+        "El conductor se encontraba bajo los efectos del alcohol.",
+        QueryType.ACCIDENT_DESCRIPTION,
+        [_alcohol_chunk()],
+    )
+
+    assert generated.response.convention_responsibility.value == "undetermined"
+    assert "responsabilidad no puede determinarse" in generated.response.conclusion
+    assert generated.adjustments == (
+        "responsibility_downgraded_missing_normative_evidence",
+        "conclusion_rendered_from_structured_decisions",
+    )
+
+
+def test_generator_renders_conclusion_from_supported_responsibility() -> None:
+    chunk = SourceChunk(
+        chunk_id="chunk-75",
+        text=(
+            "En un alcance trasero se considerará responsable al conductor del vehículo "
+            "que presente daños en la parte delantera."
+        ),
+        source="manual.pdf",
+        page=75,
+    )
+    citation = {
+        "chunk_id": "chunk-75",
+        "page": 75,
+        "quote": "se considerará responsable al conductor del vehículo",
+    }
+    payload = _accident_payload(
+        conclusion="Texto libre potencialmente inconsistente.",
+        convention_applicability="applicable",
+        convention_responsibility="vehicle_b",
+        applicability_citations=[citation],
+        responsibility_citations=[citation],
+        citations=[],
+    )
+
+    generated = AnswerGenerator(FakeLlm(payload)).generate(
+        "El vehículo B choca por detrás contra A.",
+        QueryType.ACCIDENT_DESCRIPTION,
+        [chunk],
+    )
+
+    assert generated.response.conclusion.endswith(
+        "El vehículo B resulta responsable según el convenio."
+    )
+    assert generated.adjustments == (
+        "conclusion_rendered_from_structured_decisions",
+    )
+
+
+def test_generator_repairs_accident_citation_page_from_chunk_metadata() -> None:
+    citation = {
+        "chunk_id": "chunk-9",
+        "page": 99,
+        "quote": "No se considera la alcoholemia como motivo de exclusión",
+    }
+    payload = _accident_payload(
+        convention_applicability="applicable",
+        convention_responsibility="undetermined",
+        applicability_citations=[citation],
+        citations=[],
+    )
+
+    generated = AnswerGenerator(FakeLlm(payload)).generate(
+        "El conductor se encontraba bajo los efectos del alcohol.",
+        QueryType.ACCIDENT_DESCRIPTION,
+        [_alcohol_chunk()],
+    )
+
+    assert generated.response.applicability_citations[0].page == 9
+    assert "citation_pages_repaired" in generated.adjustments
+
+
+def test_generator_degrades_only_responsibility_with_invalid_citation() -> None:
+    applicability_citation = {
+        "chunk_id": "chunk-9",
+        "page": 9,
+        "quote": "No se considera la alcoholemia como motivo de exclusión",
+    }
+    responsibility_citation = {
+        "chunk_id": "chunk-9",
+        "page": 9,
+        "quote": "El vehículo B es culpable.",
+    }
+    payload = _accident_payload(
+        convention_applicability="applicable",
+        convention_responsibility="vehicle_b",
+        applicability_citations=[applicability_citation],
+        responsibility_citations=[responsibility_citation],
+        citations=[],
+    )
+
+    generated = AnswerGenerator(FakeLlm(payload)).generate(
+        "El conductor se encontraba bajo los efectos del alcohol.",
+        QueryType.ACCIDENT_DESCRIPTION,
+        [_alcohol_chunk()],
+    )
+
+    assert generated.response.convention_applicability.value == "applicable"
+    assert generated.response.convention_responsibility.value == "undetermined"
+    assert generated.response.applicability_citations
+    assert generated.response.responsibility_citations == []
+    assert "invalid_citations_removed" in generated.adjustments
+    assert (
+        "responsibility_downgraded_missing_valid_citation"
+        in generated.adjustments
+    )
+
+
+@pytest.mark.parametrize(
+    "chunk_text, quote",
+    [
+        (
+            "El “vehículo” será de aplicación según el Convenio.",
+            'El "vehiculo" sera de aplicacion segun el Convenio.',
+        ),
+        (
+            "Los Convenios serán de aplica-\nción directa.",
+            "Los Convenios serán de aplicación directa",
+        ),
+        (
+            "La regla se aplica a CIDE/ASCIDE.",
+            "La regla se aplica a CIDE - ASCIDE",
+        ),
+    ],
+)
+def test_generator_accepts_harmless_citation_formatting_differences(
+    chunk_text: str,
+    quote: str,
+) -> None:
+    chunk = SourceChunk(
+        chunk_id="chunk-format",
+        text=chunk_text,
+        source="manual.pdf",
+        page=10,
+    )
+    payload = _payload(
+        citations=[{"chunk_id": "chunk-format", "page": 10, "quote": quote}]
+    )
+
+    generated = AnswerGenerator(FakeLlm(payload)).generate(
+        "¿Qué indica la regla?",
+        QueryType.MANUAL_QUESTION,
+        [chunk],
+    )
+
+    assert generated.response.citations[0].quote == quote
+
+
+def test_generator_rejects_citation_that_omits_preceding_negation() -> None:
+    chunk = SourceChunk(
+        chunk_id="chunk-negative",
+        text="Los convenios no son de aplicación en este supuesto.",
+        source="manual.pdf",
+        page=10,
+    )
+    payload = _payload(
+        citations=[
+            {
+                "chunk_id": "chunk-negative",
+                "page": 10,
+                "quote": "son de aplicación en este supuesto",
+            }
+        ]
+    )
+
+    with pytest.raises(OutputValidationError, match="not present"):
+        AnswerGenerator(FakeLlm(payload)).generate(
+            "¿Se aplica el convenio?",
+            QueryType.MANUAL_QUESTION,
+            [chunk],
         )

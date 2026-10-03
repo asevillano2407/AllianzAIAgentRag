@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28,<1",
+    "langgraph>=1.2,<2",
     "pydantic>=2.12,<3",
     "pydantic-settings>=2.12,<3",
     "pypdf>=6.7,<7",
@@ -21,13 +22,19 @@ allianz-ingest = "allianz_claims_rag_agent.ingestion.cli:main"
 allianz-index = "allianz_claims_rag_agent.retrieval.cli:index_main"
 allianz-search = "allianz_claims_rag_agent.retrieval.cli:search_main"
 allianz-evaluate-retrieval = "allianz_claims_rag_agent.evaluation.cli:main"
+allianz-evaluate-demo = "allianz_claims_rag_agent.evaluation.demo:main"
+allianz-evaluate-llms = "allianz_claims_rag_agent.evaluation.llm_benchmark:main"
 allianz-generate = "allianz_claims_rag_agent.generation.cli:main"
+allianz-agent = "allianz_claims_rag_agent.orchestration.cli:main"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8,<10",
     "pytest-cov>=6,<8",
     "ruff>=0.9,<1",
+]
+rerank = [
+    "sentence-transformers>=5.1,<6",
 ]
 
 [tool.setuptools.packages.find]
