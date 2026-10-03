@@ -7,19 +7,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 from allianz_claims_rag_agent.config import Settings
-from allianz_claims_rag_agent.embeddings import OllamaEmbeddingProvider
 from allianz_claims_rag_agent.errors import ApplicationError
-from allianz_claims_rag_agent.generation import AnswerGenerator, OllamaStructuredLlm
-from allianz_claims_rag_agent.orchestration import (
-    AgentDependencies,
-    DeterministicQueryRouter,
-    build_claims_graph,
-)
-from allianz_claims_rag_agent.retrieval import (
-    QdrantVectorStore,
-    build_evidence_retriever,
-    collection_name_for_model,
-)
+from allianz_claims_rag_agent.orchestration.runtime import run_local_agent
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -59,45 +48,18 @@ def main() -> int:
         if args.candidate_k is not None
         else settings.retrieval_candidate_k
     )
-    collection_name = collection_name_for_model(
-        settings.qdrant_collection_prefix,
-        embedding_model,
-    )
-
     try:
-        store = QdrantVectorStore(collection_name=collection_name, path=qdrant_path)
-        with (
-            OllamaEmbeddingProvider(
-                base_url=str(settings.ollama_base_url),
-                model_name=embedding_model,
-                timeout_seconds=settings.ollama_timeout_seconds,
-            ) as embedding_provider,
-            OllamaStructuredLlm(
-                base_url=str(settings.ollama_base_url),
-                model_name=llm_model,
-                timeout_seconds=settings.ollama_timeout_seconds,
-            ) as llm,
-        ):
-            graph = build_claims_graph(
-                AgentDependencies(
-                    retriever=build_evidence_retriever(
-                        embedding_provider,
-                        store,
-                        reranker_model=(
-                            args.reranker_model or settings.reranker_model
-                            if args.rerank
-                            else None
-                        ),
-                        candidate_k=candidate_k,
-                        reranker_batch_size=settings.reranker_batch_size,
-                    ),
-                    generator=AnswerGenerator(llm),
-                    router=DeterministicQueryRouter(),
-                    top_k=top_k,
-                    max_retries=settings.max_agent_retries,
-                )
-            )
-            result = graph.invoke({"query": args.query})
+        result = run_local_agent(
+            args.query,
+            settings=settings,
+            rerank=args.rerank,
+            embedding_model=embedding_model,
+            llm_model=llm_model,
+            qdrant_path=qdrant_path,
+            top_k=top_k,
+            candidate_k=candidate_k,
+            reranker_model=args.reranker_model,
+        )
     except (ApplicationError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 1

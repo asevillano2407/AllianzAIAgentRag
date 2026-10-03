@@ -26,6 +26,7 @@ allianz-evaluate-demo = "allianz_claims_rag_agent.evaluation.demo:main"
 allianz-evaluate-llms = "allianz_claims_rag_agent.evaluation.llm_benchmark:main"
 allianz-generate = "allianz_claims_rag_agent.generation.cli:main"
 allianz-agent = "allianz_claims_rag_agent.orchestration.cli:main"
+allianz-demo = "allianz_claims_rag_agent.demo.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -36,6 +37,12 @@ dev = [
 rerank = [
     "sentence-transformers>=5.1,<6",
 ]
+demo = [
+    "streamlit>=1.40,<2",
+]
+
+[tool.setuptools.package-data]
+"allianz_claims_rag_agent.demo" = ["assets/*", "data/*.jsonl"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

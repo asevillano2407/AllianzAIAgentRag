@@ -31,6 +31,7 @@ Documentos de esta fase:
 - [Embeddings y recuperación vectorial](docs/phase_3_retrieval.md)
 - [LLM local y salida estructurada](docs/phase_4_generation.md)
 - [Orquestación agentic con LangGraph](docs/phase_5_agentic_workflow.md)
+- [Demo local con Streamlit](docs/phase_6_streamlit_demo.md)
 - [Enfoque técnico y decisiones](docs/technical_approach.md)
 - [Evaluación de los cinco casos de demostración](docs/demo_cases_evaluation.md)
 
@@ -141,3 +142,22 @@ allianz-agent `
   --candidate-k 12 `
   --top-k 3
 ```
+
+## Demo visual con Streamlit
+
+La demo ofrece un modo instantáneo con los cinco resultados finales guardados y
+un modo que ejecuta realmente el agente local. Streamlit es opcional y no forma
+parte del runtime básico:
+
+```powershell
+python -m pip install -e ".[dev,rerank,demo]"
+allianz-demo
+```
+
+El modo real necesita Ollama, los modelos descargados y el índice Qdrant. En la
+CPU usada para la evaluación puede tardar entre seis y nueve minutos; para una
+presentación se recomienda comenzar por el resultado evaluado instantáneo.
+
+La interfaz utiliza el logotipo de Allianz únicamente para contextualizar esta
+prueba técnica no oficial. La atribución y procedencia del activo se conservan
+junto al archivo en `demo/assets/README.md`.

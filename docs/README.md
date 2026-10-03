@@ -12,7 +12,7 @@ sin depender del historial de commits ni de una conversación externa.
 | 3 | Cerrada y ampliada | Embeddings, Qdrant, evaluación y query expansion | `phase_3_retrieval.md` |
 | 4 | Cerrada y evaluada | Generación local, decisiones de negocio, citas y selección del LLM | `phase_4_generation.md` |
 | 5 | Cerrada | Grafo agentic, router, reintento y fallback | `phase_5_agentic_workflow.md` |
-| 6 | Pendiente | API e interfaz de demostración | Se creará al comenzar la fase |
+| 6 | Cerrada | Demo local con Streamlit | `phase_6_streamlit_demo.md` |
 | 7 | Pendiente | Docker, CI y observabilidad | Se creará al comenzar la fase |
 | 8 | Pendiente | Evaluación final y presentación | Se creará al comenzar la fase |
 
