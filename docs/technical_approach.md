@@ -1,126 +1,220 @@
-# Technical approach
+# Enfoque técnico, decisiones y trazabilidad
 
-## Executive summary
+## Resumen ejecutivo
 
-The solution uses retrieval augmented generation rather than fine-tuning. The
-manual is small, the answer must show its evidence and the source may change.
-The application extracts page text, creates deterministic chunks, embeds them
-locally and stores them in Chroma. A bounded LangGraph workflow retrieves the
-most relevant evidence, asks Gemini on Vertex AI for a typed response and checks
-that every citation points to a retrieved chunk.
+La solución es un RAG textual local sobre el manual CIDE/ASCIDE/CICOS. Separa
+ingestión, retrieval, generación, validación y orquestación para medir cada
+componente sin atribuir al LLM mejoras que proceden del buscador. No utiliza
+servicios de pago: Ollama ejecuta embeddings y LLM; Qdrant persiste los vectores;
+un cross-encoder local realiza el reranking; LangGraph controla el flujo.
 
-The system supports a claims handler. It does not decide legal liability,
-coverage, payment or rejection. This distinction is important because the
-manual defines operational criteria between insurers and dates from 2004.
+Configuración seleccionada para la demo:
 
-## Requirements interpretation
+| Componente | Selección | Justificación |
+| --- | --- | --- |
+| Ingestión | texto del PDF, chunks de 1.200 caracteres y solape 150 | MVP reproducible y suficiente para reglas textuales |
+| Embedding | `qwen3-embedding:0.6b` | mejor Precision, Recall y MRR que `bge-m3` en el dataset local |
+| Vector store | Qdrant local, coseno | metadatos y persistencia sin servicio externo |
+| Expansión | reglas deterministas de vocabulario | conecta el relato con términos del manual sin otra llamada LLM |
+| Candidatos | 12 | diversidad antes de filtrar |
+| Reranker | `BAAI/bge-reranker-v2-m3`, híbrido multi-query | mejora el orden sin perder la cobertura de cada expansión |
+| Contexto final | 3 chunks | recall de grupos 1,0 en los cinco casos y menos ruido para el LLM |
+| LLM | `qwen3:4b` | 100 % de éxito técnico y 80 % de negocio en la prueba final |
+| Orquestación | LangGraph | estado explícito, rutas deterministas, reintentos acotados y fallback |
 
-The interview brief asks for an LLM-based RAG system over the supplied manual,
-live responses to factual questions and accident descriptions, basic quality
-evaluation, source code, a technical document and a presentation. The five
-example accidents also require the answer to identify parties, circumstances,
-agreement responsibility and missing evidence.
+## Arquitectura
 
-## Components
+```text
+PDF
+ -> extracción y limpieza
+ -> chunks con fuente, página y sección
+ -> qwen3-embedding:0.6b
+ -> Qdrant local
 
-### Ingestion
+Consulta
+ -> validación y routing determinista
+ -> query expansion
+ -> búsqueda vectorial + RRF
+ -> reranking local multi-query
+ -> 3 chunks
+ -> qwen3:4b con JSON Schema
+ -> validación técnica + guardrails de negocio
+ -> respuesta estructurada o fallback
+```
 
-`pypdf` extracts every page. Cleaning removes page-number-only lines, soft
-hyphens, repeated whitespace and unrecoverable glyph markers. Chunks never cross
-a page boundary. Each chunk stores the source file, PDF page, detected section
-and a stable SHA-256-derived identifier.
+Los contratos de dominio no dependen de Ollama, Qdrant ni LangGraph. Los
+adaptadores concretos se inyectan en los servicios, lo que permite probar la
+lógica con dobles deterministas y sustituir componentes sin reescribir el flujo.
 
-The legacy PDF visibly renders correctly but its embedded text replaces some
-accented Spanish characters. Guessing those characters could alter legal terms,
-so the MVP uses deterministic cleaning. OCR with a Spanish model and a rendered
-page checksum is the next production improvement.
+## Separación de evaluaciones
 
 ### Retrieval
 
-`paraphrase-multilingual-MiniLM-L12-v2` produces local embeddings. Chroma uses a
-persistent cosine-distance HNSW index. The workflow requests six candidates and
-drops results beyond the configured distance threshold. Both values are
-configuration, not hardcoded business logic.
+Se mide antes de ejecutar el LLM:
 
-### Agent workflow
+- `Precision@K`: cuánto contexto recuperado es relevante;
+- `Recall@K`: cuánto soporte etiquetado se recupera;
+- `MRR`: a qué altura aparece el primer soporte relevante;
+- recall de grupos de páginas: cobertura de los conceptos requeridos por cada
+  caso de accidente.
 
-LangGraph holds explicit state containing the query, route, retrieved chunks,
-answer, validation feedback, warnings and retry count. Routing between a factual
-question and an accident narrative uses deterministic lexical rules. An LLM is
-not needed for this low-risk decision.
+El resultado final de retrieval fue recall de grupos `1,0` en los cinco casos.
+Esto permite localizar el fallo restante del caso C en generación/razonamiento,
+no en ausencia de evidencia.
 
-The graph performs these steps:
+### Validez técnica de generación
 
-1. Validate input and choose the route.
-2. Retrieve and threshold evidence.
-3. Generate a Pydantic-constrained response.
-4. Validate source, page and chunk identifiers.
-5. Retry generation once with validation feedback.
-6. Return a low-confidence fallback if validation still fails.
+`technical_success_rate` responde a «¿la ejecución produjo una salida utilizable
+por el sistema?». Requiere:
 
-The bounded retry prevents an infinite agent loop. Every node has one
-responsibility and can be tested separately.
+1. respuesta JSON compatible con el esquema Pydantic;
+2. `query_type` sin alteraciones;
+3. decisiones obligatorias en una descripción de accidente;
+4. combinación coherente de aplicabilidad y responsabilidad;
+5. citas referidas únicamente a chunks entregados al modelo;
+6. páginas consistentes con sus chunks;
+7. citas literales tras normalizar diferencias tipográficas seguras;
+8. ausencia de una contradicción explícita entre la polaridad de la decisión de
+   aplicabilidad y su evidencia.
 
-### Generation and prompt security
+Una ejecución técnicamente válida puede estar equivocada desde negocio. Esta es
+la razón por la que `completed` y `business_correct` son métricas diferentes.
 
-Gemini receives a system policy, the user request and only the retrieved
-excerpts. The prompt marks excerpts as untrusted reference data and forbids them
-from overriding application instructions. The schema separates the plain answer,
-parties, agreement responsibility, applicable framework, key facts, missing
-information, citations, confidence and limitations.
+### Corrección de negocio
 
-The model must distinguish agreement responsibility from legal liability,
-coverage, compensation and criminal responsibility. It must state when evidence
-is insufficient and must not automate a material claim decision.
+El dataset versiona para cada caso dos etiquetas independientes:
 
-### Interfaces
+- `expected_applicability`: si CIDE/ASCIDE puede aplicarse;
+- `expected_responsibility`: atribución según el convenio, o
+  `undetermined`/`not_applicable`.
 
-FastAPI exposes a health check and `POST /v1/analyze`. Streamlit calls the API
-instead of duplicating orchestration logic. The command line handles ingestion,
-single queries and evaluation. Docker Compose runs the API and UI while mounting
-the persistent data directory.
+`business_correct` solo es verdadero cuando ambas coinciden exactamente. No es
+un LLM juez ni una comparación textual: es una evaluación determinista contra
+etiquetas revisables. Con cinco casos es una señal de regresión útil, no una
+estimación estadística de producción.
 
-## Evaluation
+## Aplicabilidad y responsabilidad
 
-The versioned JSON Lines dataset covers the five interview examples and manual
-topics such as semaphores, reverse motion, direct collision and priority. Offline
-metrics include Recall@K and mean reciprocal rank. When model credentials are
-available, evaluation also checks citation validity and required structured
-fields.
+Se separaron porque responden a preguntas distintas. Que el convenio aplique no
+implica que el relato permita atribuir responsabilidad. Ejemplo: la alcoholemia
+no excluye los convenios, pero tampoco determina por sí sola quién es responsable.
 
-Retrieval and generation are measured separately because a fluent answer cannot
-compensate for missing evidence. The next iteration should add expert-labelled
-answer correctness, faithfulness and decision usefulness.
+Valores de aplicabilidad:
 
-## Testing strategy
+- `applicable`;
+- `not_applicable`;
+- `undetermined`.
 
-Unit tests use in-memory fakes and never call Vertex AI. They cover cleaning,
-stable chunk identifiers, page boundaries, routing, citation rejection, safe
-fallbacks, retrieval metrics and missing inputs. CI runs Ruff and pytest. A small
-integration test with a temporary Chroma collection can be added after pinning
-the deployment image and embedding cache.
+Valores de responsabilidad:
 
-## Privacy, security and operations
+- `vehicle_a`, `vehicle_b` o `shared`;
+- `undetermined` cuando falta una regla o un hecho exigido;
+- `not_applicable` cuando el convenio no aplica.
 
-No credentials are committed. Vertex AI uses Application Default Credentials.
-The MVP only indexes the supplied public-style manual and does not process claim
-personal data. A production service would add identity-aware access, encrypted
-storage, region controls, prompt and response redaction, audit logs, model and
-prompt versioning, monitoring and an approval checkpoint before any downstream
-action.
+La conclusión mostrada al usuario se genera de forma determinista a partir de
+estos campos. Así no puede afirmar lo contrario que la estructura validada.
 
-Key operational signals are request latency, retrieval distance, fallback rate,
-invalid-citation rate, token use, model errors and user feedback. Logs must avoid
-raw personal data and complete prompts.
+## Citas, confianza y fail-soft
 
-## Trade-offs and remaining risks
+Cada cita contiene `chunk_id`, página y texto literal. Las citas de aplicabilidad
+y responsabilidad están separadas para comprobar qué evidencia sostiene cada
+decisión. Una coincidencia literal demuestra trazabilidad, pero no garantiza por
+sí sola relevancia semántica; por eso existen además reglas de polaridad y
+guardrails de evidencia normativa.
 
-The local embedding model keeps ingestion private and reproducible, but it adds
-image size and startup cost. Chroma is appropriate for a single-document demo;
-a managed vector service would improve availability and access control at scale.
-Vertex AI aligns with enterprise deployment, but live inference depends on
-credentials and network access.
+La confianza es cualitativa, no una probabilidad calibrada:
 
-The largest knowledge risk is source currency. The UI and response schema expose
-the 2004 limitation. A production system needs an owner, update process and
-effective-date metadata before claims handlers can rely on it operationally.
+- `high`: el modelo considera que existe evidencia directa y suficiente;
+- `medium`: hay soporte, pero persiste alguna limitación;
+- `low`: no hay soporte suficiente o un guardrail degradó la decisión.
+
+Las reglas del sistema prevalecen sobre la confianza propuesta por el modelo.
+Una decisión definitiva sin cita válida se degrada a `low`.
+
+El modo fail-soft evita perder toda la respuesta por un error recuperable:
+
+| Situación | Acción |
+| --- | --- |
+| Página incorrecta, pero chunk y cita válidos | sustituir por la página real del chunk |
+| Cita inventada o chunk desconocido | eliminar la cita |
+| Aplicabilidad definitiva sin cita válida | degradar aplicabilidad y responsabilidad a `undetermined` |
+| Responsabilidad definitiva sin cita válida | conservar aplicabilidad y degradar responsabilidad |
+| Responsabilidad sin una regla normativa | degradar responsabilidad a `undetermined` |
+| Convenio no aplicable con responsabilidad de un vehículo | alinear responsabilidad a `not_applicable` |
+| Convenio aplicable con responsabilidad `not_applicable` | degradar responsabilidad a `undetermined` |
+| JSON inválido o campos obligatorios ausentes | error técnico y ruta de fallback |
+
+Cada reparación se registra en `generation.adjustments`; no ocurre de forma
+silenciosa. En preguntas generales del manual se mantiene la validación estricta.
+
+## Reranking y reducción de contexto
+
+El primer cross-encoder reordenaba todos los candidatos solo respecto al relato
+original. Mejoró las diez preguntas generales, pero redujo de `1,0` a `0,9` el
+recall medio de grupos en los accidentes al perder la página de identificación
+del contrario en C.
+
+La solución fue rerankear respecto a cada consulta original/expandida, preservar
+el mejor resultado de cada intención y fusionar los rankings mediante RRF. El
+resultado recuperó todos los grupos esperados. El reranker no genera respuestas
+ni aplica reglas de responsabilidad: únicamente ordena evidencia candidata.
+
+## Selección del LLM
+
+Las rondas no son todas directamente comparables porque el prompt, el esquema y
+los guardrails evolucionaron. Se conservan para mostrar qué fallo motivó cada
+cambio:
+
+| Ronda | Modelo | Éxito técnico | Negocio | Latencia media | Lectura |
+| --- | --- | ---: | ---: | ---: | --- |
+| Baseline inicial | `llama3.2:3b` | 60 % | revisión manual baja | 201 s | alucinaciones y errores de cita |
+| Baseline inicial | `qwen3:4b` | 80 % | 1/5 manual | 212 s | mejor equilibrio inicial |
+| Baseline inicial | `qwen3:8b` | 60 % | sin mejora global | 479 s | demasiado lento y con timeout |
+| Esquema estricto inicial | `qwen3:4b` | 0 % | 0 % | n/d | no rellenaba aún los nuevos campos obligatorios |
+| Smoke A | `gemma3:4b` | 100 % | 100 % | 276 s | justificó probar los cinco casos |
+| Cinco casos | `gemma3:4b` | 60 % | 20 % | 291 s | más rápido, pero menos fiable |
+| Final con prompt v5 y guardrails | `qwen3:4b` | **100 %** | **80 %** | 426 s | modelo seleccionado |
+
+`qwen3:4b` se selecciona por fiabilidad global, no por velocidad. En CPU tarda
+aproximadamente siete minutos por caso en la prueba final. Esto es aceptable para
+una demo técnica local, pero no para un SLA de producción.
+
+## Riesgos, supuestos y mitigaciones
+
+| Riesgo o supuesto | Impacto | Mitigación o decisión |
+| --- | --- | --- |
+| Manual de 2004 | reglas potencialmente desactualizadas | declarar alcance y no usar como asesoramiento legal actual |
+| Dataset de cinco casos | posible sobreajuste y métricas inestables | separar conjunto de retrieval de diez preguntas y documentar la limitación |
+| Validación literal no prueba relevancia | una cita válida puede apoyar otra regla | citas por decisión, polaridad y guardrail normativo |
+| CPU local | latencia alta y timeouts | contexto de 3 chunks, timeout configurable y demo con un caso preparado |
+| Reranker grande | descarga y memoria adicionales | dependencia opcional y caché local |
+| Query expansion por reglas | vocabulario no contemplado | reglas observables, testeadas y ampliables |
+| Caso C aún incorrecto | confunde aparcamiento con identificación del contrario | mostrarlo como limitación real y futura regla determinista de aplicabilidad |
+| Confidence no calibrada | puede interpretarse como probabilidad | documentarla como categoría cualitativa y forzar `low` al degradar |
+
+## Hitos y estado
+
+1. Requisitos, arquitectura y dominio: cerrados.
+2. Ingestión, limpieza y chunking: cerrados.
+3. Embeddings, Qdrant, query expansion y reranking: cerrados.
+4. Generación, salida estructurada, evaluación y selección del LLM: cerrados.
+5. LangGraph, reintentos y fallback: cerrados.
+6. Siguiente entrega: interfaz/demo breve, revisión final del README y PPTX.
+
+## Evidencias reproducibles
+
+```powershell
+# Retrieval sin ejecutar el LLM
+allianz-evaluate-retrieval --top-k 4
+
+# Retrieval de los cinco casos con configuración final
+allianz-evaluate-llms --retrieval-only --rerank --candidate-k 12 --top-k 3
+
+# Benchmark final de generación (lento en CPU)
+$env:ALLIANZ_OLLAMA_TIMEOUT_SECONDS="600"
+allianz-evaluate-llms --model qwen3:4b --rerank --candidate-k 12 --top-k 3
+
+# Tests deterministas, sin Ollama
+python -m pytest -q
+python -m ruff check .
+```

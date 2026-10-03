@@ -1,0 +1,10 @@
+{"case_id":"accessories","query":"¿Los accesorios instalados en el vehículo están incluidos al tramitar el siniestro por convenio?","relevant_pages":[7]}
+{"case_id":"alcohol","query":"¿Cómo afecta que el conductor circule bajo los efectos del alcohol o de estupefacientes?","relevant_pages":[9]}
+{"case_id":"expiry","query":"¿Cuándo caduca un siniestro que se está tramitando mediante CICOS?","relevant_pages":[14]}
+{"case_id":"no_driving_licence","query":"¿Se puede aplicar el convenio si el conductor no tiene permiso de conducir?","relevant_pages":[23]}
+{"case_id":"daa","query":"¿Qué requisitos debe cumplir la declaración amistosa para aplicar CIDE?","relevant_pages":[28,29,30]}
+{"case_id":"uninsured","query":"¿Cómo se tramita el accidente cuando uno de los vehículos carece de seguro?","relevant_pages":[47,48,49]}
+{"case_id":"reverse","query":"¿Cómo se determina la responsabilidad cuando uno de los vehículos circulaba marcha atrás?","relevant_pages":[66,67]}
+{"case_id":"deadlines","query":"¿Qué plazos existen en la tramitación de CIDE y ASCIDE a través de CICOS?","relevant_pages":[84]}
+{"case_id":"traffic_lights","query":"¿Qué criterio se aplica en una colisión regulada por semáforos?","relevant_pages":[97]}
+{"case_id":"contradictory_versions","query":"¿Qué ocurre en ASCIDE cuando las versiones de los conductores son contradictorias?","relevant_pages":[111]}
